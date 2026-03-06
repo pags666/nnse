@@ -19,15 +19,14 @@ jobs:
           python-version: "3.10"
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
-      - name: Create service account file
+      - name: Create service account json
         run: |
-          printf "%s" '${{ secrets.GCP_SA_KEY }}' > service_account.json
+          printf "%s" '${{ secrets["GOOGLE CREDENTIALS"] }}' > service_account.json
 
-      - name: Run NSE
+      - name: Run NSE script
         run: python NNSE.py
 
-      - name: Run BSE
+      - name: Run BSE script
         run: python BSE.py
