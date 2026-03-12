@@ -3,6 +3,8 @@ import time
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
+from datetime import datetime
+import pytz
 
 # -------------------------
 # GOOGLE SHEETS LOGIN
@@ -40,7 +42,7 @@ headers = {
     "X-Requested-With": "XMLHttpRequest"
 }
 
-# get cookies
+# Get cookies
 session.get("https://www.nseindia.com", headers=headers)
 time.sleep(3)
 
@@ -59,8 +61,12 @@ for item in data:
     subject = item.get("desc", "")
     details = item.get("attchmntText", "")
 
-    rows.append([symbol, company, subject, details])
-
+    rows.append([
+        symbol,
+        company,
+        subject,
+        details
+    ])
 
 df = pd.DataFrame(rows, columns=[
     "SYMBOL",
@@ -71,7 +77,7 @@ df = pd.DataFrame(rows, columns=[
 
 
 # -------------------------
-# UPLOAD TO GSHEET
+# UPLOAD TO GOOGLE SHEET
 # -------------------------
 
 sheet.clear()
@@ -80,4 +86,15 @@ sheet.update(
     [df.columns.values.tolist()] + df.values.tolist()
 )
 
+# -------------------------
+# ADD LAST UPDATED TIME
+# -------------------------
+
+ist = pytz.timezone("Asia/Kolkata")
+now = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
+
+sheet.append_row([])
+sheet.append_row(["Last Updated:", now])
+
 print("Uploaded to Google Sheet successfully")
+print("Last Updated:", now)
