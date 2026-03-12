@@ -22,8 +22,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Create service account json
-        run: |
-          printf "%s" '${{ secrets["GOOGLE_CREDENTIALS"] }}' > service_account.json
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > service_account.json
 
       - name: Run NSE script
         run: python NNSE.py
