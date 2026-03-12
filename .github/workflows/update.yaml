@@ -23,7 +23,7 @@ jobs:
 
       - name: Create service account json
         run: |
-          printf "%s" '${{ secrets["GOOGLE CREDENTIALS"] }}' > service_account.json
+          printf "%s" '${{ secrets["GOOGLE_CREDENTIALS"] }}' > service_account.json
 
       - name: Run NSE script
         run: python NNSE.py
