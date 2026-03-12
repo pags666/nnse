@@ -1,6 +1,8 @@
 import requests
 import gspread
 from google.oauth2.service_account import Credentials
+from datetime import datetime
+import pytz
 
 # ---------------------------
 # GOOGLE SHEET CONNECTION
@@ -79,5 +81,15 @@ sheet.append_row([
 ])
 
 sheet.append_rows(rows)
+
+# ---------------------------
+# ADD LAST UPDATED TIME
+# ---------------------------
+
+ist = pytz.timezone("Asia/Kolkata")
+now = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
+
+sheet.append_row([])
+sheet.append_row(["Last Updated:", now])
 
 print("BSE announcements updated:", len(rows))
