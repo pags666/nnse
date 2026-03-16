@@ -29,3 +29,5 @@ jobs:
 
       - name: Run BSE script
         run: python BSE.py
+      - name: Run BSE script
+        run: python et.py
