@@ -8,7 +8,7 @@ scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/au
 def get_google_credentials():
     raw_json = os.environ.get("GOOGLE_CREDENTIALS")
     if not raw_json:
-        raise Exception("Environment variable NEW is not set.")
+        raise Exception("Environment variable GOOGLE_CREDENTIALS is not set.")
     json_dict = json.loads(raw_json)
     creds = ServiceAccountCredentials.from_json_keyfile_dict(json_dict, scope)
     return creds
