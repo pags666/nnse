@@ -33,3 +33,5 @@ jobs:
         run: python et.py
       - name: Run moneycontrol script
         run: python monc.py
+      - name: Run words script
+        run: python words.py
