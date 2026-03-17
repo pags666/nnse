@@ -42,7 +42,7 @@ for page in range(1, pages + 1):
 
 # Google Sheet info
 SHEET_ID = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
-WORKSHEET = "moneycontrol"
+WORKSHEET = "monc"
 
 headers = ["TITLE", "LINK"]
 
