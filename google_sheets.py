@@ -1,16 +1,14 @@
-import os
-import json
+#import os
+#import json
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 def get_google_credentials():
-    raw_json = os.environ.get("service_account.json")
-    if not raw_json:
-        raise Exception("Environment variable service_account.json is not set.")
-    json_dict = json.loads(raw_json)
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(json_dict, scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_name(
+        "service_account.json", scope
+    )
     return creds
 
 def authorize_google_sheets(credentials):
