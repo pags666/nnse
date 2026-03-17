@@ -38,9 +38,9 @@ for page in range(1, pages + 1):
 
         if h2 and a:
             title = h2.text.strip()
-            link = a.get("href")
+          
 
-            rows.append([title, link])
+            rows.append([title])
 
 # ---------------- GOOGLE SHEETS ---------------- #
 
