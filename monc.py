@@ -35,7 +35,7 @@ for page in range(1, pages + 1):
             title = h2.text.strip()
        
 
-            rows.append([title, link])
+            rows.append([title])
 
             count += 1
 
