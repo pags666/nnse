@@ -34,17 +34,17 @@ else:
 
         for word in subject.split():
             if word.isupper() and len(word) <= 10:
-                symbol = word
+                
                 break
 
-        rows.append([symbol, subject, link])
+        rows.append([ subject])
 
 # ---------------- GOOGLE SHEETS ---------------- #
 
 SHEET_ID = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
 WORKSHEET = "et"
 
-headers = ["SYMBOL", "SUBJECT", "LINK"]
+headers = [ "SUBJECT"]
 
 # update sheet
 update_google_sheet_by_name(SHEET_ID, WORKSHEET, headers, rows)
