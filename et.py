@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+from zoneinfo import ZoneInfo  # ✅ IST support
 
 # import your existing google sheets module
 from google_sheets import update_google_sheet_by_name, append_footer
@@ -8,36 +9,52 @@ from google_sheets import update_google_sheet_by_name, append_footer
 BASE = "https://economictimes.indiatimes.com"
 URL = "https://economictimes.indiatimes.com/markets/stocks/news"
 
-headers = {"User-Agent": "Mozilla/5.0"}
-
-res = requests.get(URL, headers=headers)
-soup = BeautifulSoup(res.text, "html.parser")
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 rows = []
 
-articles = soup.select("h3 a")
+try:
+    res = requests.get(URL, headers=HEADERS, timeout=10)
+    res.raise_for_status()
+except Exception as e:
+    print("Error fetching ET page:", e)
+    rows = []
+else:
+    soup = BeautifulSoup(res.text, "html.parser")
 
-for a in articles[:20]:
+    articles = soup.select("h3 a")
 
-    subject = a.text.strip()
+    for a in articles[:20]:
 
-    symbol = ""
+        subject = a.text.strip()
+        link = BASE + a.get("href")
 
-    for word in subject.split():
-        if word.isupper() and len(word) <= 10:
-            symbol = word
-            break
+        # ---- SYMBOL EXTRACTION ---- #
+        symbol = ""
 
-    rows.append([symbol, subject])
+        for word in subject.split():
+            if word.isupper() and len(word) <= 10:
+                symbol = word
+                break
 
-# Sheet info
+        rows.append([symbol, subject, link])
+
+# ---------------- GOOGLE SHEETS ---------------- #
+
 SHEET_ID = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
 WORKSHEET = "et"
 
-headers = ["SYMBOL", "SUBJECT"]
+headers = ["SYMBOL", "SUBJECT", "LINK"]
 
-# push data
+# update sheet
 update_google_sheet_by_name(SHEET_ID, WORKSHEET, headers, rows)
 
-# add timestamp footer
-append_footer(SHEET_ID, WORKSHEET, ["Updated:", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+# ---------------- IST TIMESTAMP ---------------- #
+
+ist_time = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
+
+append_footer(
+    SHEET_ID,
+    WORKSHEET,
+    ["Updated (IST):", ist_time]
+)
