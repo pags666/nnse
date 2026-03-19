@@ -2,9 +2,11 @@ import re
 import gspread
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
+import pytz   # ✅ ADDED
 
-# ---------------- AUTH ---------------- #
-
+# =============================
+# GOOGLE AUTH
+# =============================
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
@@ -16,12 +18,21 @@ def get_client():
     )
     return gspread.authorize(creds)
 
-client = get_client()
+# =============================
+# IST TIME FUNCTION (ADDED)
+# =============================
+def get_ist_time():
+    ist = pytz.timezone('Asia/Kolkata')
+    return datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
 
+# =============================
+# CONFIG
+# =============================
 SHEET_ID = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
 
-# ---------------- SOURCE WEIGHT ---------------- #
-
+# =============================
+# SOURCE WEIGHTS
+# =============================
 SOURCE_WEIGHT = {
     "nse": 5,
     "bse": 5,
@@ -29,24 +40,25 @@ SOURCE_WEIGHT = {
     "et": 1
 }
 
-# ---------------- SCORING ---------------- #
-
+# =============================
+# EVENT SCORE
+# =============================
 def event_score(text):
     text = text.lower()
 
-    if any(x in text for x in ["order","contract","deal","wins","secured"]):
+    if any(x in text for x in ["order","orders","contract","deal","wins","secured","receives","received"]):
         return 5
 
     if any(x in text for x in ["approval","launch","expansion","acquisition"]):
         return 3
 
-    if any(x in text for x in ["allotment","subsidiary","investment","agreement"]):
+    if any(x in text for x in ["allotment","subsidiary","investment","agreement","partnership"]):
         return 2
 
     if any(x in text for x in ["fraud","default"]):
         return -5
 
-    if any(x in text for x in ["litigation","penalty","downgrade"]):
+    if any(x in text for x in ["litigation","penalty"]):
         return -4
 
     if "resignation" in text:
@@ -54,7 +66,9 @@ def event_score(text):
 
     return 0
 
-
+# =============================
+# MONEY SCORE
+# =============================
 def money_score(text):
     nums = re.findall(r'\d+', text)
     if not nums:
@@ -62,136 +76,154 @@ def money_score(text):
 
     val = max([int(n) for n in nums])
 
-    if val > 1000:
-        return 3
-    elif val > 100:
-        return 2
-    elif val > 10:
-        return 1
+    if val > 1000: return 3
+    elif val > 100: return 2
+    elif val > 10: return 1
     return 0
 
-
-# ---------------- SYMBOL ---------------- #
-
-def extract_symbol(row, sheet_name, text):
+# =============================
+# SYMBOL NORMALIZATION
+# =============================
+def normalize_symbol(source, row, text):
     text = text.upper()
 
     if "BEL" in text or "BHARAT ELECTRONICS" in text:
         return "BEL"
     if "SUBEX" in text:
         return "SUBEX"
+    if "DC INFOTECH" in text:
+        return "DCI"
 
-    if sheet_name in ["nse", "bse"]:
+    if source in ["nse","bse"]:
         return row[0]
 
     return "UNKNOWN"
 
+# =============================
+# READ SHEETS
+# =============================
+def read_sheet(ws, source):
+    data = ws.get_all_values()[1:]
+    result = []
 
-# ---------------- CLASSIFY ---------------- #
-
-def process_sheet(sheet_name, col_index):
-    sh = client.open_by_key(SHEET_ID)
-    ws = sh.worksheet(sheet_name)
-
-    data = ws.get_all_values()
-
-    header = data[0]
-
-    buy = []
-    sell = []
-
-    for row in data[1:]:
-
-        if len(row) < col_index:
+    for r in data:
+        if len(r) < 1:
             continue
 
-        text = row[col_index - 1]
+        if source in ["nse","bse"]:
+            text = r[-1]
+            symbol = normalize_symbol(source, r, text)
 
-        symbol = extract_symbol(row, sheet_name, text)
+        elif source == "et":
+            text = r[0]
+            symbol = "MARKET"
+
+        elif source == "monc":
+            text = r[0]
+            symbol = normalize_symbol(source, r, text)
+
+        if symbol:
+            result.append((source, symbol, text))
+
+    return result
+
+# =============================
+# MAIN ENGINE
+# =============================
+def run():
+    client = get_client()
+    sheet = client.open_by_key(SHEET_ID)
+
+    all_data = []
+
+    for name in ["nse","bse","et","monc"]:
+        try:
+            ws = sheet.worksheet(name)
+            all_data += read_sheet(ws, name)
+        except Exception as e:
+            print(f"Skipping {name}: {e}")
+
+    stock_scores = {}
+
+    for source, symbol, text in all_data:
+
+        if symbol in ["", "MARKET"]:
+            continue
 
         e = event_score(text)
 
-        # 🚀 BSE → ignore negative
-        if sheet_name == "bse" and e < 0:
+        # 🚀 BSE → REMOVE NEGATIVE IMPACT
+        if source == "bse" and e < 0:
             continue
 
         m = money_score(text)
-        w = SOURCE_WEIGHT.get(sheet_name, 1)
+        w = SOURCE_WEIGHT.get(source, 1)
 
-        score = (e + m) * w
+        total = (e + m) * w
+
+        if symbol not in stock_scores:
+            stock_scores[symbol] = 0
+
+        stock_scores[symbol] += total
+
+    # =============================
+    # FINAL OUTPUT
+    # =============================
+    output = []
+
+    print("\n======= FINAL HIGH PROBABILITY SIGNALS =======\n")
+
+    for stock, score in stock_scores.items():
 
         prob = max(0, min(100, int((score + 20) * 2)))
 
-        # ---------------- SIGNAL ---------------- #
-
         if prob >= 70:
             signal = "STRONG BUY 🟢🟢"
-            buy.append([symbol, text, score, prob, signal])
 
         elif prob >= 60:
             signal = "BUY 🟢"
-            buy.append([symbol, text, score, prob, signal])
 
         elif prob <= 30:
             signal = "STRONG SELL 🔴🔴"
-            sell.append([symbol, text, score, prob, signal])
 
         elif prob <= 40:
             signal = "SELL 🔴"
-            sell.append([symbol, text, score, prob, signal])
 
-    return buy, sell
+        else:
+            continue
 
+        print(f"{stock} | Score: {score} | {prob}% | {signal}")
 
-# ---------------- PROCESS ALL ---------------- #
+        output.append([
+            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            stock,
+            score,
+            prob,
+            signal
+        ])
 
-all_buy = []
-all_sell = []
+    print(f"\nTotal Signals: {len(output)}\n")
 
-# NSE
-b, s = process_sheet("nse", 4)
-all_buy.extend(b)
-all_sell.extend(s)
-
-# BSE
-b, s = process_sheet("bse", 3)
-all_buy.extend(b)
-# ❌ no sell from BSE
-
-# MONC
-b, s = process_sheet("monc", 1)
-all_buy.extend(b)
-all_sell.extend(s)
-
-# ET
-b, s = process_sheet("et", 1)
-all_buy.extend(b)
-all_sell.extend(s)
-
-# ---------------- UPDATE ---------------- #
-
-def update_sheet(name, rows):
-    sh = client.open_by_key(SHEET_ID)
-
+    # =============================
+    # WRITE TO SHEET
+    # =============================
     try:
-        ws = sh.worksheet(name)
-        ws.clear()
+        ws = sheet.worksheet("FINAL")
     except:
-        ws = sh.add_worksheet(title=name, rows="1000", cols="10")
+        ws = sheet.add_worksheet(title="FINAL", rows="100", cols="10")
 
-    header = ["Stock", "News", "Score", "Probability", "Signal"]
+    ws.clear()
+    ws.append_row(["Time","Stock","Score","Probability","Signal"])
 
-    ws.append_row(header)
+    if output:
+        ws.append_rows(output)
 
-    if rows:
-        ws.append_rows(rows)
+    # ✅ FOOTER (ONLY ADDITION)
+    ws.append_row([])
+    ws.append_row(["Last Updated (IST):", get_ist_time()])
 
-
-# ---------------- PUSH ---------------- #
-
-update_sheet("good", all_buy)
-update_sheet("bad", all_sell)
-
-print("✅ DONE")
-print(f"BUY: {len(all_buy)}")
-print(f"SELL: {len(all_sell)}")
+# =============================
+# RUN
+# =============================
+if __name__ == "__main__":
+    run()
