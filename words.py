@@ -41,7 +41,7 @@ SOURCE_WEIGHT = {
 }
 
 # =============================
-# 🔥 ADVANCED EVENT WORDS
+# KEYWORDS
 # =============================
 STRONG_BUY = [
 "l1 bidder","loa","letter of award","contract secured","large order","order book",
@@ -79,7 +79,7 @@ IGNORE = [
 ]
 
 # =============================
-# EVENT SCORE (MULTI HIT)
+# EVENT SCORE
 # =============================
 def event_score(text):
     text = text.lower()
@@ -141,17 +141,10 @@ def money_score(text):
 # SYMBOL NORMALIZATION
 # =============================
 def normalize_symbol(source, row, text):
-    text_upper = text.upper()
-
     if source == "nse":
         return row[0]
 
     if source == "bse":
-        if len(row) < 2:
-            return None
-
-        company = row[1].upper()
-
         return None
 
     return None
@@ -212,7 +205,6 @@ def run():
 
         e, reasons = event_score(text)
 
-        # 🚀 BSE SELL BLOCK
         if source == "bse" and e < 0:
             continue
 
@@ -234,9 +226,10 @@ def run():
 
     print("\n======= FINAL HIGH PROBABILITY SIGNALS =======\n")
 
-    for stock, score in stock_scores.items():
-        score=data["score"]
-        reasons=list(set(data["reasons"]))
+    for stock, data in stock_scores.items():
+
+        score = data["score"]
+        reasons = list(dict.fromkeys(data["reasons"]))
 
         prob = max(0, min(100, int((score + 20) * 2)))
 
@@ -262,14 +255,14 @@ def run():
             stock,
             score,
             prob,
-            signal
-            ", ".join(reasons[<3])
+            signal,
+            ", ".join(reasons[:3])
         ])
 
     print(f"\nTotal Signals: {len(output)}\n")
 
     # =============================
-    # WRITE TO SHEET (APPEND MODE)
+    # WRITE TO SHEET
     # =============================
     try:
         ws = sheet.worksheet("FINAL")
