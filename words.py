@@ -138,14 +138,19 @@ def money_score(text):
     return 0
 
 # =============================
-# SYMBOL NORMALIZATION
+# SYMBOL NORMALIZATION (FIXED)
 # =============================
 def normalize_symbol(source, row, text):
+
     if source == "nse":
         return row[0]
 
     if source == "bse":
         return None
+
+    # ✅ allow monc + et
+    if source in ["monc", "et"]:
+        return "GENERIC"
 
     return None
 
@@ -166,7 +171,7 @@ def read_sheet(ws, source):
 
         elif source == "et":
             text = r[0]
-            symbol = "MARKET"
+            symbol = "GENERIC"
 
         elif source == "monc":
             text = r[0]
@@ -200,7 +205,7 @@ def run():
 
     for source, symbol, text in all_data:
 
-        if symbol in ["", "MARKET", None]:
+        if symbol in ["", None]:
             continue
 
         e, reasons = event_score(text)
