@@ -136,13 +136,6 @@ def money_score(text):
 def normalize_symbol(source, row, text):
     text_upper = text.upper()
 
-    if "BEL" in text_upper or "BHARAT ELECTRONICS" in text_upper:
-        return "BEL"
-    if "SUBEX" in text_upper:
-        return "SUBEX"
-    if "DC INFOTECH" in text_upper:
-        return "DCI"
-
     if source == "nse":
         return row[0]
 
@@ -151,11 +144,6 @@ def normalize_symbol(source, row, text):
             return None
 
         company = row[1].upper()
-
-        if "BHARAT ELECTRONICS" in company:
-            return "BEL"
-        if "SUBEX" in company:
-            return "SUBEX"
 
         return None
 
