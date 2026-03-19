@@ -1,127 +1,197 @@
+import re
 import gspread
+from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 
 # ---------------- AUTH ---------------- #
 
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-
-def get_google_credentials():
-    return ServiceAccountCredentials.from_json_keyfile_name(
-        "service_account.json", scope
-    )
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive"
+]
 
 def get_client():
-    creds = get_google_credentials()
+    creds = ServiceAccountCredentials.from_json_keyfile_name(
+        "service_account.json", scope
+    )
     return gspread.authorize(creds)
 
 client = get_client()
 
 SHEET_ID = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
 
-# ---------------- KEYWORDS ---------------- #
+# ---------------- SOURCE WEIGHT ---------------- #
 
-GOOD_KEYWORDS = [
-    "acquisition","amalgamation","anda approval","asset quality improvement",
-    "block deal","bonus","bulk deal","buyback","capacity expansion","capex",
-    "commercial production","contract win","debt free","debt reduction","deleverage",
-    "demerger","dii buying","dividend","drug approval","drug launch","earnings beat",
-    "ebitda growth","fda approval","fii buying","approval","fresh order","government order",
-    "guidance upgrade","highest ever profit","market share","infrastructure order",
-    "insider buying","institutional buying","ipo subscribed","l1 bidder","large order",
-    "letter of award","listing gains","margin expansion","profit","revenue growth",
-    "order","plant","production","promoter buying","rating upgrade","record profit",
-    "return to profit","robust demand","strong demand","strong earnings","takeover",
-    "tax benefit","tender","turnaround","usfda","value unlocking"
-]
+SOURCE_WEIGHT = {
+    "nse": 5,
+    "bse": 5,
+    "monc": 3,
+    "et": 1
+}
 
-BAD_KEYWORDS = [
-    "accounting irregularities","asset quality stress","auditor resignation",
-    "audit qualification","bankruptcy","below estimates","block deal exit",
-    "cash crunch","credit rating downgrade","debt default","debt restructuring",
-    "default","delisting","downgrade","earnings miss","fii outflow","fraud",
-    "governance issues","guidance cut","income tax raid","insolvency",
-    "investigation","liquidity crisis","liquidation","loss","margin compression",
-    "market share loss","negative guidance","npa","plant shutdown","pledge",
-    "production halt","profit warning","promoter selling","stake sale",
-    "regulatory","revenue decline","sebi","share dilution","supply overhang",
-    "weak earnings","weak guidance"
-]
+# ---------------- SCORING ---------------- #
 
-# ---------------- FUNCTION ---------------- #
+def event_score(text):
+    text = text.lower()
 
-def classify(sheet_name, col_index):
+    if any(x in text for x in ["order","contract","deal","wins","secured"]):
+        return 5
+
+    if any(x in text for x in ["approval","launch","expansion","acquisition"]):
+        return 3
+
+    if any(x in text for x in ["allotment","subsidiary","investment","agreement"]):
+        return 2
+
+    if any(x in text for x in ["fraud","default"]):
+        return -5
+
+    if any(x in text for x in ["litigation","penalty","downgrade"]):
+        return -4
+
+    if "resignation" in text:
+        return -2
+
+    return 0
+
+
+def money_score(text):
+    nums = re.findall(r'\d+', text)
+    if not nums:
+        return 0
+
+    val = max([int(n) for n in nums])
+
+    if val > 1000:
+        return 3
+    elif val > 100:
+        return 2
+    elif val > 10:
+        return 1
+    return 0
+
+
+# ---------------- SYMBOL ---------------- #
+
+def extract_symbol(row, sheet_name, text):
+    text = text.upper()
+
+    if "BEL" in text or "BHARAT ELECTRONICS" in text:
+        return "BEL"
+    if "SUBEX" in text:
+        return "SUBEX"
+
+    if sheet_name in ["nse", "bse"]:
+        return row[0]
+
+    return "UNKNOWN"
+
+
+# ---------------- CLASSIFY ---------------- #
+
+def process_sheet(sheet_name, col_index):
     sh = client.open_by_key(SHEET_ID)
     ws = sh.worksheet(sheet_name)
 
     data = ws.get_all_values()
 
-    good = []
-    bad = []
-
     header = data[0]
+
+    buy = []
+    sell = []
 
     for row in data[1:]:
 
         if len(row) < col_index:
             continue
 
-        text = row[col_index - 1].lower()
+        text = row[col_index - 1]
 
-        if any(k in text for k in GOOD_KEYWORDS):
-            good.append(row)
+        symbol = extract_symbol(row, sheet_name, text)
 
-        elif any(k in text for k in BAD_KEYWORDS):
-            bad.append(row)
+        e = event_score(text)
 
-    return header, good, bad
+        # 🚀 BSE → ignore negative
+        if sheet_name == "bse" and e < 0:
+            continue
 
-# ---------------- PROCESS ---------------- #
+        m = money_score(text)
+        w = SOURCE_WEIGHT.get(sheet_name, 1)
 
-all_good = []
-all_bad = []
-final_header = None
+        score = (e + m) * w
 
-# NSE (col D = 4)
-h, g, b = classify("nse", 4)
-final_header = h
-all_good.extend(g)
-all_bad.extend(b)
+        prob = max(0, min(100, int((score + 20) * 2)))
 
-# BSE (col C = 3)
-h, g, b = classify("bse", 3)
-all_good.extend(g)
-all_bad.extend(b)
+        # ---------------- SIGNAL ---------------- #
 
-# MONC (col A = 1)
-h, g, b = classify("monc", 1)
-all_good.extend(g)
-all_bad.extend(b)
+        if prob >= 70:
+            signal = "STRONG BUY 🟢🟢"
+            buy.append([symbol, text, score, prob, signal])
 
-# ET (col A = 1)
-h, g, b = classify("et", 1)
-all_good.extend(g)
-all_bad.extend(b)
+        elif prob >= 60:
+            signal = "BUY 🟢"
+            buy.append([symbol, text, score, prob, signal])
 
-# ---------------- UPDATE FUNCTION ---------------- #
+        elif prob <= 30:
+            signal = "STRONG SELL 🔴🔴"
+            sell.append([symbol, text, score, prob, signal])
 
-def update_sheet(name, header, rows):
+        elif prob <= 40:
+            signal = "SELL 🔴"
+            sell.append([symbol, text, score, prob, signal])
+
+    return buy, sell
+
+
+# ---------------- PROCESS ALL ---------------- #
+
+all_buy = []
+all_sell = []
+
+# NSE
+b, s = process_sheet("nse", 4)
+all_buy.extend(b)
+all_sell.extend(s)
+
+# BSE
+b, s = process_sheet("bse", 3)
+all_buy.extend(b)
+# ❌ no sell from BSE
+
+# MONC
+b, s = process_sheet("monc", 1)
+all_buy.extend(b)
+all_sell.extend(s)
+
+# ET
+b, s = process_sheet("et", 1)
+all_buy.extend(b)
+all_sell.extend(s)
+
+# ---------------- UPDATE ---------------- #
+
+def update_sheet(name, rows):
     sh = client.open_by_key(SHEET_ID)
 
     try:
         ws = sh.worksheet(name)
         ws.clear()
     except:
-        ws = sh.add_worksheet(title=name, rows="1000", cols="20")
+        ws = sh.add_worksheet(title=name, rows="1000", cols="10")
+
+    header = ["Stock", "News", "Score", "Probability", "Signal"]
 
     ws.append_row(header)
+
     if rows:
         ws.append_rows(rows)
 
+
 # ---------------- PUSH ---------------- #
 
-update_sheet("good", final_header, all_good)
-update_sheet("bad", final_header, all_bad)
+update_sheet("good", all_buy)
+update_sheet("bad", all_sell)
 
 print("✅ DONE")
-print(f"GOOD: {len(all_good)} rows")
-print(f"BAD: {len(all_bad)} rows")
+print(f"BUY: {len(all_buy)}")
+print(f"SELL: {len(all_sell)}")
