@@ -82,22 +82,40 @@ def money_score(text):
     return 0
 
 # =============================
-# SYMBOL NORMALIZATION
+# SYMBOL NORMALIZATION (FIXED)
 # =============================
 def normalize_symbol(source, row, text):
-    text = text.upper()
+    text_upper = text.upper()
 
-    if "BEL" in text or "BHARAT ELECTRONICS" in text:
+    # Known mappings
+    if "BEL" in text_upper or "BHARAT ELECTRONICS" in text_upper:
         return "BEL"
-    if "SUBEX" in text:
+    if "SUBEX" in text_upper:
         return "SUBEX"
-    if "DC INFOTECH" in text:
+    if "DC INFOTECH" in text_upper:
         return "DCI"
 
-    if source in ["nse","bse"]:
+    # NSE → correct
+    if source == "nse":
         return row[0]
 
-    return "UNKNOWN"
+    # 🚀 BSE → FIX (avoid numeric codes)
+    if source == "bse":
+        if len(row) < 2:
+            return None
+
+        company = row[1].upper()
+
+        if "BHARAT ELECTRONICS" in company:
+            return "BEL"
+        if "SUBEX" in company:
+            return "SUBEX"
+
+        # ❌ skip numeric codes
+        return None
+
+    # MONC / ET → skip unknown
+    return None
 
 # =============================
 # READ SHEETS
@@ -121,6 +139,9 @@ def read_sheet(ws, source):
         elif source == "monc":
             text = r[0]
             symbol = normalize_symbol(source, r, text)
+
+        else:
+            continue
 
         if symbol:
             result.append((source, symbol, text))
@@ -147,7 +168,7 @@ def run():
 
     for source, symbol, text in all_data:
 
-        if symbol in ["", "MARKET"]:
+        if symbol in ["", "MARKET", None]:
             continue
 
         e = event_score(text)
@@ -212,18 +233,18 @@ def run():
     except:
         ws = sheet.add_worksheet(title="FINAL", rows="1000", cols="10")
 
-    # ✅ Header only once
+    # Header only once
     if not ws.get_all_values():
         ws.append_row(["Time","Stock","Score","Probability","Signal"])
 
-    # ✅ Sort by probability
+    # Sort by probability
     output.sort(key=lambda x: x[3], reverse=True)
 
-    # ✅ Append (NO CLEAR)
+    # Append
     if output:
         ws.append_rows(output)
 
-    # ✅ Footer
+    # Footer
     ws.append_row(["Last Updated (IST):", get_ist_time()])
 
 # =============================
