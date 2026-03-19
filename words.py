@@ -203,6 +203,8 @@ def run():
         ])
 
     print(f"\nTotal Signals: {len(output)}\n")
+    # ✅ SORT HERE
+    output.sort(key=lambda x: x[3], reverse=True)
 
     # =============================
     # WRITE TO SHEET
