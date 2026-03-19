@@ -248,7 +248,7 @@ def run():
         print(f"{stock} | Score: {score} | {prob}% | {signal}")
 
         output.append([
-            datetime.now().strftime("%Y-%m-%d %H:%M"),
+            datetime.now(pytz.timezone('Asia/Kolkata')).strftime("%Y-%m-%d %H:%M"),
             stock,
             score,
             prob,
