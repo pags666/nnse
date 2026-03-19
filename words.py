@@ -41,30 +41,79 @@ SOURCE_WEIGHT = {
 }
 
 # =============================
-# EVENT SCORE
+# 🔥 ADVANCED EVENT WORDS
+# =============================
+STRONG_BUY = [
+"l1 bidder","loa","letter of award","contract secured","large order","order book",
+"buyback","bonus","stock split","record profit","all time high profit",
+"debt free","deleveraging","promoter buying","value unlocking","turnaround"
+]
+
+MEDIUM_BUY = [
+"capacity expansion","partnership","joint venture","acquisition",
+"margin expansion","earnings beat","revenue growth","order inflow"
+]
+
+LIGHT_BUY = [
+"agreement","mou","investment","launch","expansion"
+]
+
+STRONG_SELL = [
+"forensic audit","auditor resignation","default","insolvency","nclt",
+"sebi action","fraud","accounting irregularities","pledge invoked"
+]
+
+MEDIUM_SELL = [
+"rating downgrade","loss widens","earnings miss",
+"production halt","governance issue"
+]
+
+LIGHT_SELL = [
+"stake sale","promoter selling","margin pressure",
+"guidance cut","penalty","litigation"
+]
+
+IGNORE = [
+"board meeting","postal ballot","agm","investor meet",
+"trading window","clarification","newspaper"
+]
+
+# =============================
+# EVENT SCORE (MULTI HIT)
 # =============================
 def event_score(text):
     text = text.lower()
 
-    if any(x in text for x in ["order","orders","contract","deal","wins","secured","receives","received"]):
-        return 5
+    if any(x in text for x in IGNORE):
+        return 0
 
-    if any(x in text for x in ["approval","launch","expansion","acquisition"]):
-        return 3
+    score = 0
 
-    if any(x in text for x in ["allotment","subsidiary","investment","agreement","partnership"]):
-        return 2
+    for w in STRONG_BUY:
+        if w in text:
+            score += 6
 
-    if any(x in text for x in ["fraud","default"]):
-        return -5
+    for w in MEDIUM_BUY:
+        if w in text:
+            score += 3
 
-    if any(x in text for x in ["litigation","penalty"]):
-        return -4
+    for w in LIGHT_BUY:
+        if w in text:
+            score += 1
 
-    if "resignation" in text:
-        return -2
+    for w in STRONG_SELL:
+        if w in text:
+            score -= 6
 
-    return 0
+    for w in MEDIUM_SELL:
+        if w in text:
+            score -= 3
+
+    for w in LIGHT_SELL:
+        if w in text:
+            score -= 1
+
+    return score
 
 # =============================
 # MONEY SCORE
@@ -82,12 +131,11 @@ def money_score(text):
     return 0
 
 # =============================
-# SYMBOL NORMALIZATION (FIXED)
+# SYMBOL NORMALIZATION
 # =============================
 def normalize_symbol(source, row, text):
     text_upper = text.upper()
 
-    # Known mappings
     if "BEL" in text_upper or "BHARAT ELECTRONICS" in text_upper:
         return "BEL"
     if "SUBEX" in text_upper:
@@ -95,11 +143,9 @@ def normalize_symbol(source, row, text):
     if "DC INFOTECH" in text_upper:
         return "DCI"
 
-    # NSE → correct
     if source == "nse":
         return row[0]
 
-    # 🚀 BSE → FIX (avoid numeric codes)
     if source == "bse":
         if len(row) < 2:
             return None
@@ -111,10 +157,8 @@ def normalize_symbol(source, row, text):
         if "SUBEX" in company:
             return "SUBEX"
 
-        # ❌ skip numeric codes
         return None
 
-    # MONC / ET → skip unknown
     return None
 
 # =============================
@@ -233,18 +277,14 @@ def run():
     except:
         ws = sheet.add_worksheet(title="FINAL", rows="1000", cols="10")
 
-    # Header only once
     if not ws.get_all_values():
         ws.append_row(["Time","Stock","Score","Probability","Signal"])
 
-    # Sort by probability
     output.sort(key=lambda x: x[3], reverse=True)
 
-    # Append
     if output:
         ws.append_rows(output)
 
-    # Footer
     ws.append_row(["Last Updated (IST):", get_ist_time()])
 
 # =============================
