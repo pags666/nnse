@@ -85,35 +85,42 @@ def event_score(text):
     text = text.lower()
 
     if any(x in text for x in IGNORE):
-        return 0
+        return 0, []
 
     score = 0
+    reasons = []
 
     for w in STRONG_BUY:
         if w in text:
             score += 6
+            reasons.append(w)
 
     for w in MEDIUM_BUY:
         if w in text:
             score += 3
+            reasons.append(w)
 
     for w in LIGHT_BUY:
         if w in text:
             score += 1
+            reasons.append(w)
 
     for w in STRONG_SELL:
         if w in text:
             score -= 6
+            reasons.append(w)
 
     for w in MEDIUM_SELL:
         if w in text:
             score -= 3
+            reasons.append(w)
 
     for w in LIGHT_SELL:
         if w in text:
             score -= 1
+            reasons.append(w)
 
-    return score
+    return score, reasons
 
 # =============================
 # MONEY SCORE
@@ -203,7 +210,7 @@ def run():
         if symbol in ["", "MARKET", None]:
             continue
 
-        e = event_score(text)
+        e, reasons = event_score(text)
 
         # 🚀 BSE SELL BLOCK
         if source == "bse" and e < 0:
@@ -215,9 +222,10 @@ def run():
         total = (e + m) * w
 
         if symbol not in stock_scores:
-            stock_scores[symbol] = 0
+            stock_scores[symbol] = {"score":0, "reasons":[]}
 
-        stock_scores[symbol] += total
+        stock_scores[symbol]["score"] += total
+        stock_scores[symbol]["reasons"].extend(reasons)
 
     # =============================
     # FINAL OUTPUT
@@ -227,6 +235,8 @@ def run():
     print("\n======= FINAL HIGH PROBABILITY SIGNALS =======\n")
 
     for stock, score in stock_scores.items():
+        score=data["score"]
+        reasons=list(set(data["reasons"]))
 
         prob = max(0, min(100, int((score + 20) * 2)))
 
@@ -253,6 +263,7 @@ def run():
             score,
             prob,
             signal
+            ", ".join(reasons[<3])
         ])
 
     print(f"\nTotal Signals: {len(output)}\n")
@@ -266,7 +277,7 @@ def run():
         ws = sheet.add_worksheet(title="FINAL", rows="1000", cols="10")
 
     if not ws.get_all_values():
-        ws.append_row(["Time","Stock","Score","Probability","Signal"])
+        ws.append_row(["Time","Stock","Score","Probability","Signal","Reason"])
 
     output.sort(key=lambda x: x[3], reverse=True)
 
