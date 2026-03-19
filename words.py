@@ -2,7 +2,7 @@ import re
 import gspread
 from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
-import pytz   # ✅ ADDED
+import pytz
 
 # =============================
 # GOOGLE AUTH
@@ -19,7 +19,7 @@ def get_client():
     return gspread.authorize(creds)
 
 # =============================
-# IST TIME FUNCTION (ADDED)
+# IST TIME
 # =============================
 def get_ist_time():
     ist = pytz.timezone('Asia/Kolkata')
@@ -152,7 +152,7 @@ def run():
 
         e = event_score(text)
 
-        # 🚀 BSE → REMOVE NEGATIVE IMPACT
+        # 🚀 BSE SELL BLOCK
         if source == "bse" and e < 0:
             continue
 
@@ -203,25 +203,27 @@ def run():
         ])
 
     print(f"\nTotal Signals: {len(output)}\n")
-    # ✅ SORT HERE
-    output.sort(key=lambda x: x[3], reverse=True)
 
     # =============================
-    # WRITE TO SHEET
+    # WRITE TO SHEET (APPEND MODE)
     # =============================
     try:
         ws = sheet.worksheet("FINAL")
     except:
-        ws = sheet.add_worksheet(title="FINAL", rows="100", cols="10")
+        ws = sheet.add_worksheet(title="FINAL", rows="1000", cols="10")
 
-    ws.clear()
-    ws.append_row(["Time","Stock","Score","Probability","Signal"])
+    # ✅ Header only once
+    if not ws.get_all_values():
+        ws.append_row(["Time","Stock","Score","Probability","Signal"])
 
+    # ✅ Sort by probability
+    output.sort(key=lambda x: x[3], reverse=True)
+
+    # ✅ Append (NO CLEAR)
     if output:
         ws.append_rows(output)
 
-    # ✅ FOOTER (ONLY ADDITION)
-    ws.append_row([])
+    # ✅ Footer
     ws.append_row(["Last Updated (IST):", get_ist_time()])
 
 # =============================
