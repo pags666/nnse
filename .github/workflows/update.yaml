@@ -35,5 +35,7 @@ jobs:
         run: python monc.py
       - name: Run words script
         run: python words.py
-      - name: Run ai script
+      - name: Run ai script 
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: python ai.py
