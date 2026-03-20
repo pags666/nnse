@@ -44,8 +44,8 @@ rows = input_ws.get_all_records()
 company_news = defaultdict(list)
 
 for row in rows:
-    company = row["Company"]
-    news = row["News"]
+    company = row["SYMBOL"]
+    news = row["DETAILS"]
 
     if company and news:
         company_news[company].append(news)
