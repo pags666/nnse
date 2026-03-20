@@ -21,8 +21,11 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-creds_dict = json.loads(os.environ["service_account.json"])
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+creds = ServiceAccountCredentials.from_json_keyfile_name(
+    "service_account.json",
+    scope
+)
+
 client = gspread.authorize(creds)
 
 input_ws = client.open_by_key(SHEET_ID).worksheet(INPUT_WS)
