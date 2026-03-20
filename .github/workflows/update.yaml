@@ -35,3 +35,5 @@ jobs:
         run: python monc.py
       - name: Run words script
         run: python words.py
+      - name: Run ai script
+        run: python ai.py
