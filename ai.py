@@ -222,14 +222,10 @@ scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive"
 ]
-
-creds_dict = json.loads(os.environ["GOOGLE_CREDS"])
-
 creds = ServiceAccountCredentials.from_json_keyfile_name(
     "service_account.json",
     scope
 )
-
 client = gspread.authorize(creds)
 spreadsheet = client.open_by_key(SHEET_ID)
 
