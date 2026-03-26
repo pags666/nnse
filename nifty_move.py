@@ -21,7 +21,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 # CREATE GOOGLE CREDS FILE
 # =========================
 def create_creds():
-    encoded = os.getenv("GOOGLE_CREDS")
+    encoded = os.getenv("service_account")
 
     if encoded:
         with open("service_account.json", "wb") as f:
