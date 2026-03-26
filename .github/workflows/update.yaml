@@ -23,7 +23,8 @@ jobs:
 
       - name: Create service account json
         run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > service_account.json
-
+      - name: Run NSE script
+        run: python nifty_move.py
       - name: Run NSE script
         run: python NNSE.py
 
