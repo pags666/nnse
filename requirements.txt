@@ -8,3 +8,5 @@ gspread
 oauth2client
 beautifulsoup4
 groq
+transformers
+torch
