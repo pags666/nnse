@@ -26,7 +26,8 @@ jobs:
 
       - name: Create service account json
         run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > service_account.json
-
+      - name: Run ai script
+        run: python consolidated.py
       - name: Run NSE script
         run: python nifty_move.py   # ✅ NOW WORKS
 
@@ -47,5 +48,4 @@ jobs:
 
       - name: Run ai script
         run: python ai.py
-      - name: Run ai script
-        run: python consolidated.py
+
