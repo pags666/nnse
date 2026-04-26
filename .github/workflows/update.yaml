@@ -47,3 +47,5 @@ jobs:
 
       - name: Run ai script
         run: python ai.py
+      - name: Run ai script
+        run: python consolidated.py
