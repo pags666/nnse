@@ -272,7 +272,7 @@ def run():
     try:
         ws = sheet.worksheet("FINAL")
     except:
-        ws = sheet.add_worksheet(title="FINAL", rows="1000", cols="10")
+        ws = sheet.add_worksheet(title="wordf", rows="1000", cols="10")
 
     if not ws.get_all_values():
         ws.append_row(["Time","Stock","Score","Probability","Signal","Reason"])
