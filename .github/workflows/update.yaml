@@ -9,6 +9,9 @@ jobs:
   run-script:
     runs-on: ubuntu-latest
 
+    env:   # ✅ ADD THIS BLOCK
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -23,20 +26,24 @@ jobs:
 
       - name: Create service account json
         run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > service_account.json
+
       - name: Run NSE script
-        run: python nifty_move.py
+        run: python nifty_move.py   # ✅ NOW WORKS
+
       - name: Run NSE script
         run: python NNSE.py
 
       - name: Run BSE script
         run: python BSE.py
+
       - name: Run et script
         run: python et.py
+
       - name: Run moneycontrol script
         run: python monc.py
+
       - name: Run words script
         run: python words.py
-      - name: Run ai script 
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+      - name: Run ai script
         run: python ai.py
