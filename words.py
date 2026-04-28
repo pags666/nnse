@@ -348,8 +348,8 @@ SELL_CONF_THRESHOLD = 60
 #   - One very strong keyword + a large deal value, OR
 #   - Two independent strong keywords in the same text
 # =============================
-BUY_100_SCORE  = 60
-SELL_100_SCORE = -60
+BUY_100_SCORE  = 30
+SELL_100_SCORE = -30
 
 # =============================
 # KEYWORD ENGINE
@@ -584,10 +584,7 @@ _IGNORE_COMPILED = [re.compile(p, re.IGNORECASE) for p in IGNORE_PATTERNS]
 # Returns (buy_score, sell_score, reasons)
 # =============================
 def event_score(text):
-    # Skip routine disclosures immediately
-    for pat in _IGNORE_COMPILED:
-        if pat.search(text):
-            return 0, 0, []
+    # Skip routine disclosures immediate
 
     buy_score  = 0
     sell_score = 0
