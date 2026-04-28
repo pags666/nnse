@@ -224,6 +224,8 @@ for ticker in all_tickers:
     # =========================
     # FINBERT FILTER (ADD HERE)
     # =========================
+    if g["action"] == "NO TRADE" and w["action"] == "NO TRADE":
+        continue
     combined_text = f"{g['reason']} {w['reason']}"
     sentiment, sent_conf = finbert_sentiment(combined_text)
 
