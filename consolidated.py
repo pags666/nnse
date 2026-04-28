@@ -33,7 +33,24 @@ ss    = gc.open_by_key(SHEET_ID)
 # GROQ CLIENT
 # =========================
 groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
+# =========================
+# FINBERT (ADD THIS BLOCK)
+# =========================
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import torch
 
+tokenizer = AutoTokenizer.from_pretrained("yiyanghkust/finbert-tone")
+finbert_model = AutoModelForSequenceClassification.from_pretrained("yiyanghkust/finbert-tone")
+
+def finbert_sentiment(text):
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+    outputs = finbert_model(**inputs)
+    probs = torch.nn.functional.softmax(outputs.logits, dim=1)
+
+    labels = ["negative", "neutral", "positive"]
+    score = probs.detach().numpy()[0]
+
+    return labels[score.argmax()].upper(), float(score.max())
 # =========================
 # HELPERS
 # =========================
@@ -204,7 +221,22 @@ for ticker in all_tickers:
 
     g = groq_map.get(ticker, {"probability": 0, "action": "NO TRADE", "reason": ""})
     w = word_map.get(ticker,  {"score": 0,       "action": "NO TRADE", "reason": ""})
+    # =========================
+    # FINBERT FILTER (ADD HERE)
+    # =========================
+    combined_text = f"{g['reason']} {w['reason']}"
+    sentiment, sent_conf = finbert_sentiment(combined_text)
 
+    # skip weak neutral signals
+    if sentiment == "NEUTRAL" and sent_conf < 0.6:
+        continue
+
+    # block conflicting sentiment
+    if sentiment == "NEGATIVE" and g["action"] == "BUY":
+        continue
+
+    if sentiment == "POSITIVE" and g["action"] == "SELL":
+        continue
     # skip if both empty
     if g["action"] == "NO TRADE" and w["action"] == "NO TRADE":
         continue
@@ -235,18 +267,18 @@ for ticker in all_tickers:
 
         # only keep trades above confidence cutoff
         # allow strong SELL even if below cutoff
-        if final_action == "SELL" and confidence >= 65:
+        if final_action in ("BUY", "SELL") and confidence >= 70:
             final_results.append({
-            "ticker"     : ticker,
-            "action"     : final_action,
-            "confidence" : confidence,
-            "agreement"  : agreement,
-            "groq_action": g["action"],
-            "groq_prob"  : g["probability"],
-            "word_action": w["action"],
-            "word_score" : w["score"],
-            "reason"     : reason,
-        })
+                "ticker": ticker,
+                 "action": final_action,
+                "confidence": confidence,
+                "agreement": agreement,
+                "groq_action": g["action"],
+                "groq_prob": g["probability"],
+                "word_action": w["action"],
+                "word_score": w["score"],
+                "reason": reason,
+            })
         continue
 
         print(f"  {ticker:20s}  {final_action:8s}  conf={confidence}%  agree={agreement}")
