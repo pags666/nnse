@@ -131,7 +131,7 @@ def is_meaningful_news(news_list):
 # =========================
 def analyze(company, news_list):
 
-    combined_news = "\n".join(news_list[:3)
+    combined_news = "\n".join(news_list[:3])
 
     prompt = f"""
 You are a strict stock market analyst.
