@@ -686,7 +686,12 @@ def read_sheet(ws, source):
     for row in rows[1:]:
         if not row:
             continue
-        text = row[-1].strip()
+        if source == "nse":
+            text = row[3].strip() if len(row) > 3 else ""
+        elif source == "bse":
+            text = row[2].strip() if len(row) > 2 else ""
+        else:
+            text = ""
         if not text:
             continue
         symbol = extract_symbol(source, row)
