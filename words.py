@@ -270,7 +270,7 @@ def run():
     # WRITE TO SHEET
     # =============================
     try:
-        ws = sheet.worksheet("FINAL")
+        ws = sheet.worksheet("wordf")
     except:
         ws = sheet.add_worksheet(title="wordf", rows="1000", cols="10")
 
