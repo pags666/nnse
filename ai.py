@@ -106,26 +106,32 @@ for row in all_rows:
 def is_meaningful_news(news_list):
     text = " ".join(news_list).lower()
 
-    important_keywords = [
+    buy_keywords = [
         "order", "contract", "award", "loa",
         "profit", "revenue", "ebitda",
         "acquisition", "stake", "buyback",
         "expansion", "capex"
     ]
 
+    sell_keywords = [
+        "loss", "default", "downgrade",
+        "resignation", "fraud", "penalty",
+        "nclt", "insolvency", "decline",
+        "sebi", "audit", "pledge"
+    ]
+
     ignore_keywords = [
-        "scrutinizer", "compliance", "certificate",
+        "scrutinizer", "certificate",
         "newspaper", "postal ballot", "agm",
         "trading window", "esop"
     ]
 
-    # ❌ ignore junk
-   # Remove junk words but don't discard full news
+    # ✅ clean text instead of rejecting
     for k in ignore_keywords:
         text = text.replace(k, "")
 
-    # ✅ must have at least one real trigger
-    return any(k in text for k in important_keywords)
+    # ✅ allow BOTH buy and sell signals
+    return any(k in text for k in (buy_keywords + sell_keywords))
 # =========================
 # AI ANALYSIS FUNCTION
 # =========================
@@ -137,6 +143,14 @@ def analyze(company, news_list):
 You are a strict stock market analyst.
 You are going to invest so you have to predict the future stock behaviour.
 Be strict and factual.
+You are a strict stock market analyst.
+Your job is to detect BOTH positive and negative signals.
+If negative signals are stronger → return SELL.
+If positive signals are stronger → return BUY.
+If no strong signal → return NO TRADE.
+
+Do NOT favor BUY.
+Do NOT assume or hallucinate.
 Do NOT assume or infer anything not present in the news.
 If no strong trigger exists, return NO TRADE..
 Company: {company}
@@ -164,6 +178,12 @@ Rules:
 4. DO NOT assume or guess.
 5. DO NOT connect unrelated macro news.
 6. Do not hallucinate yourself
+7. SELL triggers include:
+- loss increase
+- auditor resignation
+- downgrade
+- default
+- sebi action
 
 Return ONLY JSON:
 
