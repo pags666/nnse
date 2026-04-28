@@ -331,8 +331,8 @@ SOURCE_WEIGHT = {
 # =============================
 # CONFIDENCE THRESHOLDS
 # =============================
-BUY_CONF_THRESHOLD  = 80
-SELL_CONF_THRESHOLD = 80
+BUY_CONF_THRESHOLD  = 60
+SELL_CONF_THRESHOLD = 60
 
 # =============================
 # SCORE CALIBRATION
