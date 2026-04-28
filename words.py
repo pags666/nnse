@@ -667,9 +667,17 @@ def get_signal_label(conf, direction):
 # SYMBOL EXTRACTION
 # =============================
 def extract_symbol(source, row):
-    if source in ["nse", "bse"]:
+
+    # NSE → column A is symbol (correct)
+    if source == "nse":
         if row and row[0].strip():
             return row[0].strip().upper()
+
+    # BSE → use COMPANY NAME (column B)
+    elif source == "bse":
+        if len(row) > 1 and row[1].strip():
+            return row[1].strip().upper()
+
     return None
 
 # =============================
