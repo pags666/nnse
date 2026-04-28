@@ -9,7 +9,16 @@ from zoneinfo import ZoneInfo
 import gspread
 from groq import Groq
 from oauth2client.service_account import ServiceAccountCredentials
+import re
 
+def extract_json(text):
+    match = re.search(r'\{.*?\}', text, re.DOTALL)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group())
+    except Exception as e:
+        return None
 # =========================
 # CONFIG
 # =========================
@@ -111,8 +120,9 @@ def is_meaningful_news(news_list):
     ]
 
     # ❌ ignore junk
-    if any(k in text for k in ignore_keywords):
-        return False
+   # Remove junk words but don't discard full news
+    for k in ignore_keywords:
+        text = text.replace(k, "")
 
     # ✅ must have at least one real trigger
     return any(k in text for k in important_keywords)
@@ -121,13 +131,14 @@ def is_meaningful_news(news_list):
 # =========================
 def analyze(company, news_list):
 
-    combined_news = "\n".join(news_list)
+    combined_news = "\n".join(news_list[:3)
 
     prompt = f"""
 You are a strict stock market analyst.
 You are going to invest so you have to predict the future stock behaviour.
-Dont make the decisions by yourselfs.
-Use the mathematical calculations to find the results.
+Be strict and factual.
+Do NOT assume or infer anything not present in the news.
+If no strong trigger exists, return NO TRADE..
 Company: {company}
 
 News:
@@ -191,13 +202,12 @@ for company, news_list in company_news.items():
         # clean response
         ai_output = ai_output.replace("```json", "").replace("```", "").strip()
 
-        start = ai_output.find("{")
-        end = ai_output.rfind("}") + 1
+        data = extract_json(ai_output)
 
-        if start == -1 or end == -1:
+        if not data:
+            print(f"❌ Invalid JSON for {company}")
+            print("RAW:", ai_output)
             continue
-
-        data = json.loads(ai_output[start:end])
 
         score = data.get("score", 0)
         prob = data.get("probability", 0)
@@ -207,7 +217,7 @@ for company, news_list in company_news.items():
         # DECISION LOGIC
         # =========================
         action = data.get("action", "NO TRADE")
-        if action == "BUY" and prob >= 70 and "order" in reason.lower():
+        if action == "BUY" and prob >= 70:
             results.append([company, prob, "BUY", reason])
         elif action == "SELL" and prob >= 60:
             results.append([company, prob, "SELL", reason])
