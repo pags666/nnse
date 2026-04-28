@@ -39,7 +39,7 @@ groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 
-tokenizer = AutoTokenizer.from_pretrained("yiyanghkust/finbert-tone")
+tokenizer = AutoTokenizer.from_pretrained("yiyanghkust/finbert-tone",use_fast=False)
 finbert_model = AutoModelForSequenceClassification.from_pretrained("yiyanghkust/finbert-tone")
 
 def finbert_sentiment(text):
