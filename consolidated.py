@@ -201,12 +201,29 @@ Consolidate and return JSON only.
 final_results = []
 
 for ticker in all_tickers:
+
     g = groq_map.get(ticker, {"probability": 0, "action": "NO TRADE", "reason": ""})
     w = word_map.get(ticker,  {"score": 0,       "action": "NO TRADE", "reason": ""})
 
-    # skip if both are NO TRADE (no Groq API call needed)
+    # skip if both empty
     if g["action"] == "NO TRADE" and w["action"] == "NO TRADE":
         continue
+
+    # 🔥 DIRECT PASS if no word signal
+    if ticker not in word_map:
+        if g["action"] in ("BUY", "SELL") and g["probability"] >= 65:
+            final_results.append({
+                "ticker": ticker,
+                "action": g["action"],
+                "confidence": int(g["probability"]),
+                "agreement": "GROQ_ONLY",
+                "groq_action": g["action"],
+                "groq_prob": g["probability"],
+                "word_action": "NONE",
+                "word_score": 0,
+                "reason": g["reason"],
+            })
+            continue  # ✅ VERY IMPORTANT
 
     try:
         result = consolidate_with_groq(ticker, g, w)
