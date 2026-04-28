@@ -36,21 +36,29 @@ groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
 # =========================
 # FINBERT (ADD THIS BLOCK)
 # =========================
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-import torch
+from huggingface_hub import InferenceClient
+import os
 
-tokenizer = AutoTokenizer.from_pretrained("yiyanghkust/finbert-tone",use_fast=False)
-finbert_model = AutoModelForSequenceClassification.from_pretrained("yiyanghkust/finbert-tone")
+hf_client = InferenceClient(
+    provider="auto",
+    api_key=os.environ.get("HF_TOKEN")
+)
 
 def finbert_sentiment(text):
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
-    outputs = finbert_model(**inputs)
-    probs = torch.nn.functional.softmax(outputs.logits, dim=1)
+    try:
+        result = hf_client.text_classification(
+            text,
+            model="ProsusAI/finbert"
+        )
 
-    labels = ["negative", "neutral", "positive"]
-    score = probs.detach().numpy()[0]
+        label = result[0]["label"].upper()
+        score = float(result[0]["score"])
 
-    return labels[score.argmax()].upper(), float(score.max())
+        return label, score
+
+    except Exception as e:
+        print("FinBERT error:", e)
+        return "NEUTRAL", 0.5
 # =========================
 # HELPERS
 # =========================
