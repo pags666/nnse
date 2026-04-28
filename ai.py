@@ -94,7 +94,28 @@ for row in all_rows:
     if company and news and key not in seen:
         company_news[company].append(news)
         seen.add(key)
+def is_meaningful_news(news_list):
+    text = " ".join(news_list).lower()
 
+    important_keywords = [
+        "order", "contract", "award", "loa",
+        "profit", "revenue", "ebitda",
+        "acquisition", "stake", "buyback",
+        "expansion", "capex"
+    ]
+
+    ignore_keywords = [
+        "scrutinizer", "compliance", "certificate",
+        "newspaper", "postal ballot", "agm",
+        "trading window", "esop"
+    ]
+
+    # ❌ ignore junk
+    if any(k in text for k in ignore_keywords):
+        return False
+
+    # ✅ must have at least one real trigger
+    return any(k in text for k in important_keywords)
 # =========================
 # AI ANALYSIS FUNCTION
 # =========================
@@ -103,29 +124,44 @@ def analyze(company, news_list):
     combined_news = "\n".join(news_list)
 
     prompt = f"""
-You are a professional stock trader.
-
-Analyze the news impact.
-
+You are a strict stock market analyst.
+You are going to invest so you have to predict the future stock behaviour.
+Dont make the decisions by yourselfs.
+Use the mathematical calculations to find the results.
 Company: {company}
+
 News:
 {combined_news}
+
+Rules:
+1. ONLY consider REAL price-moving events:
+   - large orders/contracts
+   - strong earnings (profit growth, margin expansion)
+   - acquisitions or stake changes
+   - promoter buying
+
+2. IGNORE completely:
+   - scrutinizer reports
+   - compliance certificates
+   - SDD filings
+   - newspaper publication
+   - general updates
+
+3. If no strong trigger → return:
+   "action": "NO TRADE"
+
+4. DO NOT assume or guess.
+5. DO NOT connect unrelated macro news.
+6. Do not hallucinate yourself
 
 Return ONLY JSON:
 
 {{
-  "score": number between -1 and 1,
-  "probability": number (0-100),
+  "score": -1 to 1,
+  "probability": 0-100,
   "action": "BUY / SELL / NO TRADE",
-  "reason": "short explanation"
+  "reason": "short factual reason"
 }}
-
-Rules:
-- Strong positive → BUY
-- Strong negative → SELL
-- Routine / no impact → NO TRADE
-- Ignore:
-  trading window, postal ballot, AGM, newspaper, compliance updates
 """
 
     response = groq.chat.completions.create(
@@ -142,6 +178,9 @@ Rules:
 results = []
 
 for company, news_list in company_news.items():
+
+    if not is_meaningful_news(news_list):
+        continue   # 🔥 SKIP NOISE
 
     try:
         ai_output = analyze(company, news_list)
@@ -168,7 +207,7 @@ for company, news_list in company_news.items():
         # DECISION LOGIC
         # =========================
         action = data.get("action", "NO TRADE")
-        if action == "BUY" and prob >= 60:
+        if action == "BUY" and prob >= 70 and "order" in reason.lower():
             results.append([company, prob, "BUY", reason])
         elif action == "SELL" and prob >= 60:
             results.append([company, prob, "SELL", reason])
