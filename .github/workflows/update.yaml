@@ -23,6 +23,10 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install transformers torch sentencepiece tokenizers
 
       - name: Create service account json
         run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > service_account.json
