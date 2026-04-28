@@ -541,7 +541,7 @@ SELL_PATTERNS = [
 # ── IGNORE PATTERNS ─────────────────────────────────────────────────────────
 # Routine / non-material filings — skip entirely (zero score)
 IGNORE_PATTERNS = [
-    r'\bboard\s+meeting\s+(intimation|scheduled|on\s+\d|notice)\b',
+    r'\bboard\s+meeting\s+(intimation|scheduled|notice)\b',
     r'\bpostal\s+ballot\b',
     r'\b(agm|egm)\s+(notice|on|scheduled)\b',
     r'\binvestor\s+meet\b|\banalyst\s+meet\b|\bearnings?\s+(call|conference\s+call)\b',
@@ -686,17 +686,13 @@ def read_sheet(ws, source):
     for row in rows[1:]:
         if not row:
             continue
-        if source == "nse":
-            text = row[3].strip() if len(row) > 3 else ""
-        elif source == "bse":
-            text = row[2].strip() if len(row) > 2 else ""
-        else:
-            text = ""
-        if not text:
+        # 🔥 KEY CHANGE: combine entire row
+        full_text = " ".join([cell.strip() for cell in row if cell.strip()])
+        if not full_text:
             continue
         symbol = extract_symbol(source, row)
         if symbol:
-            result.append((source, symbol, text))
+            result.append((source, symbol, full_text))
     return result
 
 # =============================
