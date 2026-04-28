@@ -16,7 +16,7 @@ SHEET_ID          = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
 GROQ_SHEET        = "groq"          # sheet with Groq AI output  (Company | Probability % | Action | Reason)
 WORD_SHEET        = "wordf"         # sheet with word/keyword signals (COMPANY | SCORE | ACTION | REASON)
 OUTPUT_SHEET      = "consolidated"  # where we write the final result
-CONFIDENCE_CUTOFF = 80              # only emit rows where final confidence >= this
+CONFIDENCE_CUTOFF = 70              # only emit rows where final confidence >= this
 
 # =========================
 # GOOGLE SHEETS AUTH
@@ -123,12 +123,27 @@ You receive two independent signals for a stock:
 Your task: consolidate both signals into ONE final recommendation.
 
 Rules:
-- If BOTH signals say BUY  → strong BUY.  Confidence = avg(prob, score) boosted by +5 (cap 100).
-- If BOTH signals say SELL → strong SELL. Confidence = avg(prob, score) boosted by +5 (cap 100).
-- If signals CONFLICT      → default to NO TRADE unless one probability is >= 85 (then lean that way, confidence capped at 70).
-- If one signal is NO TRADE and other is BUY/SELL → take the BUY/SELL only if confidence >= 70, else NO TRADE.
-- Ignore routine filings (AGM, postal ballot, newspaper ads, compliance).
-- Account for Indian market context: PSU stocks, defence sector, MSME micro-caps, refinery/energy, irrigation/agri.
+
+- If BOTH signals say BUY → STRONG BUY. Confidence = avg(prob, score) + 5 (max 100)
+
+- If BOTH signals say SELL → STRONG SELL. Confidence = avg(prob, score) + 5 (max 100)
+
+- If signals CONFLICT:
+  → choose the signal with higher probability/score
+  → reduce confidence by 5 only
+  → do NOT default to NO TRADE
+
+- If one signal is NO TRADE and other is BUY/SELL:
+  → allow if confidence >= 60
+  → otherwise NO TRADE
+
+- Do NOT ignore valid SELL signals
+
+- Ignore only:
+  compliance filings, scrutinizer reports, certificates, newspaper ads
+
+- Focus ONLY on price-moving events:
+  orders, results, contracts, losses, resignations, penalties
 
 Return ONLY valid JSON (no markdown, no explanation outside JSON):
 {
@@ -202,18 +217,20 @@ for ticker in all_tickers:
         reason       = result.get("consolidated_reason", "")
 
         # only keep trades above confidence cutoff
-        if final_action in ("BUY", "SELL") and confidence >= CONFIDENCE_CUTOFF:
+        # allow strong SELL even if below cutoff
+        if final_action == "SELL" and confidence >= 65:
             final_results.append({
-                "ticker"     : ticker,
-                "action"     : final_action,
-                "confidence" : confidence,
-                "agreement"  : agreement,
-                "groq_action": g["action"],
-                "groq_prob"  : g["probability"],
-                "word_action": w["action"],
-                "word_score" : w["score"],
-                "reason"     : reason,
-            })
+            "ticker"     : ticker,
+            "action"     : final_action,
+            "confidence" : confidence,
+            "agreement"  : agreement,
+            "groq_action": g["action"],
+            "groq_prob"  : g["probability"],
+            "word_action": w["action"],
+            "word_score" : w["score"],
+            "reason"     : reason,
+        })
+        continue
 
         print(f"  {ticker:20s}  {final_action:8s}  conf={confidence}%  agree={agreement}")
 
