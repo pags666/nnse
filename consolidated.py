@@ -69,7 +69,7 @@ def finbert_sentiment(text):
 # =========================
 nse_rows = sheet_to_records(ss.worksheet("nse"))
 bse_raw = ss.worksheet("bse").get_all_values()
-
+all_rows = []
 # skip header
 for row in bse_raw[1:]:
 
@@ -84,7 +84,7 @@ for row in bse_raw[1:]:
             "ticker": ticker,
             "text": text
         })
-all_rows = []
+
 
 for r in nse_rows:
     t = normalise_ticker(r.get("SYMBOL", ""))
@@ -92,11 +92,6 @@ for r in nse_rows:
     if t and txt:
         all_rows.append({"ticker": t, "text": txt})
 
-for r in bse_rows:
-    t = normalise_ticker(r.get("SYMBOL", ""))
-    txt = str(r.get("ANNOUNCEMENT", ""))
-    if t and txt:
-        all_rows.append({"ticker": t, "text": txt})
 
 print(f"✅ NSE: {len(nse_rows)} | BSE: {len(bse_rows)}")
 
