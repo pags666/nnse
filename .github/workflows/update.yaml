@@ -32,24 +32,24 @@ jobs:
         run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > service_account.json
       - name: Run ai script
         run: python consolidated.py
-      - name: Run NSE script
-        run: python nifty_move.py   # ✅ NOW WORKS
+     #  #- name: Run NSE script
+     #  #  run: python nifty_move.py   # ✅ NOW WORKS
 
-      - name: Run NSE script
-        run: python NNSE.py
+     # # - name: Run NSE script
+     #   # run: python NNSE.py
 
-      - name: Run BSE script
-        run: python BSE.py
+     #  - name: Run BSE script
+     #    run: python BSE.py
 
-      - name: Run et script
-        run: python et.py
+     #  - name: Run et script
+     #    run: python et.py
 
-      - name: Run moneycontrol script
-        run: python monc.py
+     #  - name: Run moneycontrol script
+     #    run: python monc.py
 
-      - name: Run words script
-        run: python words.py
+     #  - name: Run words script
+     #    run: python words.py
 
-      - name: Run ai script
-        run: python ai.py
+     #  - name: Run ai script
+     #    run: python ai.py
 
