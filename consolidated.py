@@ -68,8 +68,22 @@ def finbert_sentiment(text):
 # READ NSE + BSE
 # =========================
 nse_rows = sheet_to_records(ss.worksheet("nse"))
-bse_rows = sheet_to_records(ss.worksheet("bse"))
+bse_raw = ss.worksheet("bse").get_all_values()
 
+# skip header
+for row in bse_raw[1:]:
+
+    if len(row) < 3:
+        continue
+
+    ticker = normalise_ticker(row[1])   # ✅ Column B (index 1)
+    text   = str(row[2])                # ✅ Column C (index 2)
+
+    if ticker and text:
+        all_rows.append({
+            "ticker": ticker,
+            "text": text
+        })
 all_rows = []
 
 for r in nse_rows:
@@ -204,3 +218,22 @@ for r in final_results:
     ])
 
 print(f"\n✅ Done: {len(final_results)} signals")
+# =========================
+# ADD TIMESTAMP
+# =========================
+# =========================
+# IST TIMESTAMP
+# =========================
+ist_time = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S IST")
+
+out.append_row([])
+out.append_row(["Last Updated", ist_time])
+
+# optional formatting
+last_row = len(out.get_all_values())
+out.format(f"A{last_row}:B{last_row}", {
+    "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.7},
+    "textFormat": {"bold": True}
+})
+
+print(f"⏰ IST Time: {ist_time}")
