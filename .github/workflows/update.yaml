@@ -36,7 +36,7 @@ jobs:
         run: python nifty_move.py   # ✅ NOW WORKS
 
       - name: Run NSE script
-       run: python NNSE.py
+        run: python NNSE.py
 
       - name: Run BSE script
         run: python BSE.py
