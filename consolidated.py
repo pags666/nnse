@@ -203,13 +203,17 @@ Return ONLY valid JSON (no explanation outside JSON):
         print("❌", ticker, e)
 
 # =========================
-# WRITE OUTPUT
+# WRITE OUTPUT (APPEND MODE)
 # =========================
 out = open_or_create(OUTPUT_SHEET)
-out.clear()
 
-out.append_row(["Ticker","Action","Confidence","Reason"])
+# If sheet is empty → add header
+existing_data = out.get_all_values()
 
+if not existing_data:
+    out.append_row(["Ticker","Action","Confidence","Reason"])
+
+# Append new rows
 for r in final_results:
     out.append_row([
         r["ticker"],
@@ -218,7 +222,7 @@ for r in final_results:
         r["reason"]
     ])
 
-print(f"\n✅ Done: {len(final_results)} signals")
+print(f"\n✅ Appended: {len(final_results)} signals")
 # =========================
 # ADD TIMESTAMP
 # =========================
