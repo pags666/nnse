@@ -104,7 +104,7 @@ for r in all_rows:
 
     sentiment, conf = finbert_sentiment(text)
 
-    if sentiment == "NEUTRAL" and conf < 0.6:
+    if sentiment == "NEUTRAL" and conf < 0.3:
         continue
 
     try:
@@ -143,8 +143,8 @@ STRICT RULES:
    - <65 → weak → NO TRADE
 
 5. DO NOT GUESS.
-   If impact is unclear → return NO TRADE.
-
+   If moderately positive → BUY (confidence 55–70)
+   If moderately negative → SELL (confidence 55–70)
 6. Keep reasoning SHORT and factual (1 line only).
 
 ---
@@ -174,7 +174,7 @@ Return ONLY valid JSON (no explanation outside JSON):
         action = data["action"].upper()
         confidence = int(data["confidence"])
 
-        if action in ("BUY","SELL") and confidence >= 65:
+        if action in ("BUY","SELL") and confidence >= 55:
             final_results.append({
                 "ticker": ticker,
                 "action": action,
