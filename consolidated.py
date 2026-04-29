@@ -68,16 +68,18 @@ def finbert_sentiment(text):
 # READ NSE + BSE
 # =========================
 nse_rows = sheet_to_records(ss.worksheet("nse"))
-bse_raw = ss.worksheet("bse").get_all_values()
-all_rows = []
-# skip header
+bse_raw  = ss.worksheet("bse").get_all_values()
+
+all_rows = []   # ✅ define FIRST
+
+# ---------- BSE (index-based) ----------
 for row in bse_raw[1:]:
 
     if len(row) < 3:
         continue
 
-    ticker = normalise_ticker(row[1])   # ✅ Column B (index 1)
-    text   = str(row[2])                # ✅ Column C (index 2)
+    ticker = normalise_ticker(row[1])   # Column B
+    text   = str(row[2])                # Column C
 
     if ticker and text:
         all_rows.append({
@@ -85,16 +87,20 @@ for row in bse_raw[1:]:
             "text": text
         })
 
-
+# ---------- NSE ----------
 for r in nse_rows:
-    t = normalise_ticker(r.get("SYMBOL", ""))
-    txt = str(r.get("DETAILS", ""))
-    if t and txt:
-        all_rows.append({"ticker": t, "text": txt})
+    ticker = normalise_ticker(r.get("SYMBOL", ""))
+    text   = str(r.get("DETAILS", ""))
 
+    if ticker and text:
+        all_rows.append({
+            "ticker": ticker,
+            "text": text
+        })
 
-print(f"✅ NSE: {len(nse_rows)} | BSE: {len(bse_rows)}")
-
+# ✅ correct print
+print(f"✅ NSE: {len(nse_rows)} | BSE: {len(bse_raw)-1}")
+print(f"✅ Total rows: {len(all_rows)}")
 # =========================
 # MAIN LOGIC
 # =========================
