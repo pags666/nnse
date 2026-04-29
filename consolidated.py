@@ -1,22 +1,18 @@
 import os
 import json
-import re
-from collections import defaultdict
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import gspread
 from groq import Groq
 from oauth2client.service_account import ServiceAccountCredentials
+from huggingface_hub import InferenceClient
 
 # =========================
 # CONFIG
 # =========================
-SHEET_ID          = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
-GROQ_SHEET        = "groq"          # sheet with Groq AI output  (Company | Probability % | Action | Reason)
-WORD_SHEET        = "wordf"         # sheet with word/keyword signals (COMPANY | SCORE | ACTION | REASON)
-OUTPUT_SHEET      = "consolidated"  # where we write the final result
-CONFIDENCE_CUTOFF = 70              # only emit rows where final confidence >= this
+SHEET_ID     = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
+OUTPUT_SHEET = "consolidated"
 
 # =========================
 # GOOGLE SHEETS AUTH
@@ -30,14 +26,28 @@ gc    = gspread.authorize(creds)
 ss    = gc.open_by_key(SHEET_ID)
 
 # =========================
-# GROQ CLIENT
+# HELPERS
+# =========================
+def sheet_to_records(ws):
+    rows = ws.get_all_values()
+    if len(rows) < 2:
+        return []
+    headers = [h.strip().upper() for h in rows[0]]
+    return [dict(zip(headers, r)) for r in rows[1:] if any(r)]
+
+def normalise_ticker(x):
+    return str(x).strip().upper()
+
+def open_or_create(title):
+    try:
+        return ss.worksheet(title)
+    except:
+        return ss.add_worksheet(title=title, rows="200", cols="10")
+
+# =========================
+# CLIENTS
 # =========================
 groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
-# =========================
-# FINBERT (ADD THIS BLOCK)
-# =========================
-from huggingface_hub import InferenceClient
-import os
 
 hf_client = InferenceClient(
     provider="auto",
@@ -50,316 +60,147 @@ def finbert_sentiment(text):
             text,
             model="ProsusAI/finbert"
         )
-
-        label = result[0]["label"].upper()
-        score = float(result[0]["score"])
-
-        return label, score
-
-    except Exception as e:
-        print("FinBERT error:", e)
+        return result[0]["label"].upper(), float(result[0]["score"])
+    except:
         return "NEUTRAL", 0.5
-# =========================
-# HELPERS
-# =========================
-def open_or_create(title, rows=200, cols=10):
-    try:
-        return ss.worksheet(title)
-    except Exception:
-        return ss.add_worksheet(title=title, rows=str(rows), cols=str(cols))
-
-def sheet_to_records(ws):
-    """Return list-of-dicts; first row = headers."""
-    rows = ws.get_all_values()
-    if len(rows) < 2:
-        return []
-    headers = [h.strip().upper() for h in rows[0]]
-    return [dict(zip(headers, r)) for r in rows[1:] if any(r)]
-
-def normalise_ticker(raw: str) -> str:
-    """Upper-case, strip spaces."""
-    return str(raw).strip().upper()
 
 # =========================
-# READ SOURCE SHEETS
+# READ NSE + BSE
 # =========================
-groq_ws  = ss.worksheet(GROQ_SHEET)
-word_ws  = ss.worksheet(WORD_SHEET)
+nse_rows = sheet_to_records(ss.worksheet("nse"))
+bse_rows = sheet_to_records(ss.worksheet("bse"))
 
-groq_rows = sheet_to_records(groq_ws)
-word_rows = sheet_to_records(word_ws)
+all_rows = []
 
-print(f"✅  Groq sheet  : {len(groq_rows)} rows")
-print(f"✅  Word sheet  : {len(word_rows)} rows")
+for r in nse_rows:
+    t = normalise_ticker(r.get("SYMBOL", ""))
+    txt = str(r.get("DETAILS", ""))
+    if t and txt:
+        all_rows.append({"ticker": t, "text": txt})
 
-# =========================
-# INDEX BOTH SHEETS BY COMPANY
-# =========================
-# groq_map : ticker → {probability, action, reason}
-groq_map = {}
-for r in groq_rows:
-    ticker = normalise_ticker(r.get("COMPANY") or r.get("SYMBOL") or "")
-    if not ticker:
-        continue
-    try:
-        prob = float(str(r.get("PROBABILITY %") or r.get("PROBABILITY") or 0).replace("%", ""))
-    except ValueError:
-        prob = 0.0
-    action = str(r.get("ACTION", "")).strip().upper()
-    reason = str(r.get("REASON", "")).strip()
-    if ticker not in groq_map or prob > groq_map[ticker]["probability"]:
-        groq_map[ticker] = {"probability": prob, "action": action, "reason": reason}
+for r in bse_rows:
+    t = normalise_ticker(r.get("SYMBOL", ""))
+    txt = str(r.get("ANNOUNCEMENT", ""))
+    if t and txt:
+        all_rows.append({"ticker": t, "text": txt})
 
-# word_map : ticker → {score, action, reason}
-word_map = {}
-for r in word_rows:
-    ticker = normalise_ticker(
-        r.get("COMPANY") or r.get("COMPANY NAME") or r.get("SYMBOL") or ""
-    )
-    if not ticker:
-        continue
-    try:
-        score = float(str(r.get("SCORE") or r.get("PROBABILITY %") or 0).replace("%", ""))
-    except ValueError:
-        score = 0.0
-    action = str(r.get("ACTION", "")).strip().upper()
-    reason = str(r.get("REASON", "") or r.get("DETAILS", "")).strip()
-    if ticker not in word_map or score > word_map[ticker]["score"]:
-        word_map[ticker] = {"score": score, "action": action, "reason": reason}
+print(f"✅ NSE: {len(nse_rows)} | BSE: {len(bse_rows)}")
 
 # =========================
-# MERGE: all tickers from both sheets
-# =========================
-all_tickers = sorted(set(groq_map) | set(word_map))
-
-# =========================
-# CONSOLIDATION via Groq AI
-# =========================
-SYSTEM_PROMPT = """You are a senior quantitative stock analyst for Indian equity markets (NSE/BSE).
-
-You receive two independent signals for a stock:
-
-1. GROQ AI SIGNAL  — generated from real-time NSE/BSE exchange announcements using an LLM.
-   Fields: action (BUY/SELL/NO TRADE), probability (0-100), reason.
-
-2. KEYWORD/WORD SIGNAL — generated from a rule-based keyword scan of the same announcements.
-   Fields: action (BUY/SELL/NO TRADE), score (0-100), reason.
-
-Your task: consolidate both signals into ONE final recommendation.
-
-Rules:
-
-- If BOTH signals say BUY → STRONG BUY. Confidence = avg(prob, score) + 5 (max 100)
-
-- If BOTH signals say SELL → STRONG SELL. Confidence = avg(prob, score) + 5 (max 100)
-
-- If signals CONFLICT:
-  → choose the signal with higher probability/score
-  → reduce confidence by 5 only
-  → do NOT default to NO TRADE
-
-- If one signal is NO TRADE and other is BUY/SELL:
-  → allow if confidence >= 60
-  → otherwise NO TRADE
-
-- Do NOT ignore valid SELL signals
-
-- Ignore only:
-  compliance filings, scrutinizer reports, certificates, newspaper ads
-
-- Focus ONLY on price-moving events:
-  orders, results, contracts, losses, resignations, penalties
-
-Return ONLY valid JSON (no markdown, no explanation outside JSON):
-{
-  "final_action": "BUY" | "SELL" | "NO TRADE",
-  "confidence": <integer 0-100>,
-  "signal_agreement": "AGREE" | "CONFLICT" | "PARTIAL",
-  "groq_weight": <0.0-1.0>,
-  "word_weight": <0.0-1.0>,
-  "consolidated_reason": "<2-3 sentence professional reasoning>"
-}
-"""
-
-def consolidate_with_groq(ticker, g, w):
-    """Call Groq to merge two signals. Returns dict."""
-
-    user_msg = f"""
-Ticker: {ticker}
-
---- GROQ AI SIGNAL ---
-Action      : {g.get("action", "NO TRADE")}
-Probability : {g.get("probability", 0)}%
-Reason      : {g.get("reason", "N/A")}
-
---- KEYWORD/WORD SIGNAL ---
-Action      : {w.get("action", "NO TRADE")}
-Score       : {w.get("score", 0)}%
-Reason      : {w.get("reason", "N/A")}
-
-Consolidate and return JSON only.
-"""
-
-    resp = groq_client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": user_msg},
-        ],
-        temperature=0.1,
-        max_tokens=300,
-    )
-
-    raw = resp.choices[0].message.content.strip()
-    raw = raw.replace("```json", "").replace("```", "").strip()
-
-    start = raw.find("{")
-    end   = raw.rfind("}") + 1
-    if start == -1 or end <= start:
-        raise ValueError(f"No JSON found in: {raw!r}")
-
-    return json.loads(raw[start:end])
-
-# =========================
-# RUN CONSOLIDATION
+# MAIN LOGIC
 # =========================
 final_results = []
 
-for ticker in all_tickers:
+for r in all_rows:
 
-    g = groq_map.get(ticker, {"probability": 0, "action": "NO TRADE", "reason": ""})
-    w = word_map.get(ticker,  {"score": 0,       "action": "NO TRADE", "reason": ""})
-    # =========================
-    # FINBERT FILTER (ADD HERE)
-    # =========================
-    if g["action"] == "NO TRADE" and w["action"] == "NO TRADE":
-        continue
-    combined_text = f"{g['reason']} {w['reason']}"
-    sentiment, sent_conf = finbert_sentiment(combined_text)
+    ticker = r["ticker"]
+    text   = r["text"]
 
-    # skip weak neutral signals
-    if sentiment == "NEUTRAL" and sent_conf < 0.6:
+    if len(text) < 30:
         continue
 
-    # block conflicting sentiment
-    if sentiment == "NEGATIVE" and g["action"] == "BUY":
+    if "compliance" in text.lower():
         continue
 
-    if sentiment == "POSITIVE" and g["action"] == "SELL":
-        continue
-    # skip if both empty
-    if g["action"] == "NO TRADE" and w["action"] == "NO TRADE":
-        continue
+    sentiment, conf = finbert_sentiment(text)
 
-    # 🔥 DIRECT PASS if no word signal
-    if ticker not in word_map:
-        if g["action"] in ("BUY", "SELL") and g["probability"] >= 65:
-            final_results.append({
-                "ticker": ticker,
-                "action": g["action"],
-                "confidence": int(g["probability"]),
-                "agreement": "GROQ_ONLY",
-                "groq_action": g["action"],
-                "groq_prob": g["probability"],
-                "word_action": "NONE",
-                "word_score": 0,
-                "reason": g["reason"],
-            })
-            continue  # ✅ VERY IMPORTANT
+    if sentiment == "NEUTRAL" and conf < 0.6:
+        continue
 
     try:
-        result = consolidate_with_groq(ticker, g, w)
+        prompt = f"""
+You are a professional stock analyst specializing in Indian markets (NSE/BSE).
 
-        final_action = result.get("final_action", "NO TRADE").upper()
-        confidence   = int(result.get("confidence", 0))
-        agreement    = result.get("signal_agreement", "")
-        reason       = result.get("consolidated_reason", "")
+Your task: analyze the announcement and determine if it is likely to move stock price in the short term (1–2 days).
 
-        # only keep trades above confidence cutoff
-        # allow strong SELL even if below cutoff
-        if final_action in ("BUY", "SELL") and confidence >= 70:
+STRICT RULES:
+
+1. ONLY consider PRICE-MOVING EVENTS:
+   - Order wins / contracts / MoUs
+   - Strong earnings / weak earnings
+   - Fundraising / stake sale / acquisition
+   - Promoter buying or selling
+   - Regulatory penalties / bans
+   - Management resignation (especially CEO/CFO)
+   - Large expansion or capacity addition
+
+2. IGNORE COMPLETELY (return NO TRADE):
+   - Compliance filings
+   - Scrutinizer reports
+   - AGM notices / board meetings
+   - Newspaper publications
+   - Routine disclosures
+   - Certificates / approvals without financial impact
+
+3. SENTIMENT LOGIC:
+   - Strong positive business event → BUY
+   - Strong negative event → SELL
+   - Weak / unclear / mixed → NO TRADE
+
+4. CONFIDENCE SCORING (STRICT):
+   - 80–100 → strong, clear impact
+   - 65–79 → moderate impact
+   - <65 → weak → NO TRADE
+
+5. DO NOT GUESS.
+   If impact is unclear → return NO TRADE.
+
+6. Keep reasoning SHORT and factual (1 line only).
+
+---
+
+ANNOUNCEMENT:
+{text}
+
+---
+
+Return ONLY valid JSON (no explanation outside JSON):
+
+{{
+  "action": "BUY | SELL | NO TRADE",
+  "confidence": <integer 0-100>,
+  "reason": "<short factual reason>"
+}}
+"""
+
+        resp = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+        )
+
+        data = json.loads(resp.choices[0].message.content.replace("```",""))
+
+        action = data["action"].upper()
+        confidence = int(data["confidence"])
+
+        if action in ("BUY","SELL") and confidence >= 65:
             final_results.append({
                 "ticker": ticker,
-                 "action": final_action,
+                "action": action,
                 "confidence": confidence,
-                "agreement": agreement,
-                "groq_action": g["action"],
-                "groq_prob": g["probability"],
-                "word_action": w["action"],
-                "word_score": w["score"],
-                "reason": reason,
+                "reason": data["reason"]
             })
-        continue
 
-        print(f"  {ticker:20s}  {final_action:8s}  conf={confidence}%  agree={agreement}")
+        print(f"{ticker} → {action} ({confidence})")
 
     except Exception as e:
-        print(f"❌  {ticker}: {e}")
+        print("❌", ticker, e)
 
 # =========================
-# SORT: confidence DESC, BUY first
+# WRITE OUTPUT
 # =========================
-final_results.sort(key=lambda x: (-x["confidence"], x["action"] != "BUY"))
+out = open_or_create(OUTPUT_SHEET)
+out.clear()
 
-# =========================
-# WRITE TO OUTPUT SHEET
-# =========================
-out_ws = open_or_create(OUTPUT_SHEET)
-out_ws.clear()
+out.append_row(["Ticker","Action","Confidence","Reason"])
 
-headers = [
-    "Ticker",
-    "Final Action",
-    "Confidence %",
-    "Signal Agreement",
-    "Groq Action",
-    "Groq Prob %",
-    "Word Action",
-    "Word Score %",
-    "Consolidated Reason",
-]
-out_ws.append_row(headers)
-
-# format header row
-out_ws.format("A1:I1", {
-    "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.6},
-    "textFormat": {"bold": True, "foregroundColor": {"red": 1, "green": 1, "blue": 1}},
-})
-
-# write data rows
-for row in final_results:
-    out_ws.append_row([
-        row["ticker"],
-        row["action"],
-        row["confidence"],
-        row["agreement"],
-        row["groq_action"],
-        row["groq_prob"],
-        row["word_action"],
-        row["word_score"],
-        row["reason"],
+for r in final_results:
+    out.append_row([
+        r["ticker"],
+        r["action"],
+        r["confidence"],
+        r["reason"]
     ])
 
-# colour-code BUY = green, SELL = red
-all_vals = out_ws.get_all_values()
-for i, row_vals in enumerate(all_vals[1:], start=2):
-    action_cell = row_vals[1].upper() if len(row_vals) > 1 else ""
-    if action_cell == "BUY":
-        bg = {"red": 0.85, "green": 1.0, "blue": 0.85}
-    elif action_cell == "SELL":
-        bg = {"red": 1.0, "green": 0.85, "blue": 0.85}
-    else:
-        continue
-    out_ws.format(f"A{i}:I{i}", {"backgroundColor": bg})
-
-# timestamp row
-ist_time = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M IST")
-last_row = len(out_ws.get_all_values()) + 1
-out_ws.append_row(["Last Updated", ist_time])
-out_ws.format(f"A{last_row}:B{last_row}", {
-    "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.7},
-    "textFormat": {"bold": True, "italic": True},
-})
-
-print(f"\n✅  Done — {len(final_results)} consolidated signals written to '{OUTPUT_SHEET}' sheet.")
-print(f"⏰  Timestamp: {ist_time}")
+print(f"\n✅ Done: {len(final_results)} signals")
