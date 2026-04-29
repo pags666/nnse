@@ -9,3 +9,7 @@ oauth2client
 beautifulsoup4
 groq
 huggingface_hub
+transformers 
+torch 
+sentencepiece 
+tokenizers 
