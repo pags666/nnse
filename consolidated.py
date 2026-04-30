@@ -161,7 +161,13 @@ STRICT RULES:
    If moderately positive → BUY (confidence 55–70)
    If moderately negative → SELL (confidence 55–70)
 6. Keep reasoning SHORT and factual (1 line only).
+IMPORTANT FILTER:
 
+- DO NOT give BUY only because of "acquisition"
+- If acquisition impact is unclear, long-term, or already expected → NO TRADE
+- If no immediate financial impact (revenue/profit visibility) → NO TRADE
+
+always dont blindly by comparing to the words only. 
 ---
 
 ANNOUNCEMENT:
