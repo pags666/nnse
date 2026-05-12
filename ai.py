@@ -15,6 +15,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 def extract_json(text):
 
     try:
+
         match = re.search(r'\{.*\}', text, re.DOTALL)
 
         if not match:
@@ -145,6 +146,9 @@ for row in all_rows:
             row.get("ANNOUNCEMENT", "")
         ).strip()
 
+    else:
+        continue
+
     if not company:
         continue
 
@@ -165,7 +169,6 @@ for row in all_rows:
 # =========================================================
 IGNORE_KEYWORDS = [
 
-    # compliance
     "scrutinizer",
     "certificate",
     "postal ballot",
@@ -181,17 +184,11 @@ IGNORE_KEYWORDS = [
     "committee meeting",
     "clarification",
     "corporate action",
-
-    # appointments
     "re-appointment",
     "appointment",
     "cessation",
-
-    # meetings
     "board meeting",
     "outcome of board meeting",
-
-    # filing noise
     "financial statement",
     "compliance certificate",
     "newspaper advertisement",
@@ -199,6 +196,7 @@ IGNORE_KEYWORDS = [
     "esop",
     "intimation",
     "updates",
+    "closure of trading window",
 ]
 
 
@@ -208,7 +206,7 @@ IGNORE_KEYWORDS = [
 EVENT_MAP = {
 
     # =====================================================
-    # STRONG BUY EVENTS
+    # BUY EVENTS
     # =====================================================
     "received order": "ORDER",
     "bagging order": "ORDER",
@@ -220,44 +218,34 @@ EVENT_MAP = {
     "contract": "ORDER",
 
     "acquisition": "ACQUISITION",
-    "stake acquisition": "ACQUISITION",
 
     "buyback": "BUYBACK",
 
     "capacity expansion": "EXPANSION",
     "commercial production": "EXPANSION",
     "commissioning": "EXPANSION",
-    "plant expansion": "EXPANSION",
 
     "strategic partnership": "PARTNERSHIP",
-    "joint venture": "PARTNERSHIP",
 
     "profit increase": "EARNINGS",
     "margin expansion": "EARNINGS",
     "revenue growth": "EARNINGS",
     "ebitda growth": "EARNINGS",
-    "strong earnings": "EARNINGS",
-
-    "dividend": "DIVIDEND",
 
     "approval received": "APPROVAL",
 
-    "debt reduction": "DEBT_REDUCTION",
-
     # =====================================================
-    # STRONG SELL EVENTS
+    # SELL EVENTS
     # =====================================================
     "auditor resignation": "AUDITOR_RISK",
 
     "insolvency": "INSOLVENCY",
-    "nclt": "INSOLVENCY",
 
     "default": "DEFAULT",
 
     "fraud": "FRAUD",
 
     "sebi action": "REGULATORY",
-    "penalty": "REGULATORY",
 
     "bankruptcy": "BANKRUPTCY",
 
@@ -270,69 +258,6 @@ EVENT_MAP = {
 
 
 # =========================================================
-# BUY EVENTS
-# =========================================================
-BUY_EVENTS = [
-
-    "ORDER",
-    "ACQUISITION",
-    "BUYBACK",
-    "EXPANSION",
-    "PARTNERSHIP",
-    "EARNINGS",
-    "DIVIDEND",
-    "APPROVAL",
-    "DEBT_REDUCTION"
-]
-
-
-# =========================================================
-# SELL EVENTS
-# =========================================================
-SELL_EVENTS = [
-
-    "AUDITOR_RISK",
-    "INSOLVENCY",
-    "DEFAULT",
-    "FRAUD",
-    "REGULATORY",
-    "BANKRUPTCY",
-    "WEAK_EARNINGS",
-    "PLEDGE_RISK",
-    "DOWNGRADE"
-]
-
-
-# =========================================================
-# EVENT PROBABILITY
-# =========================================================
-EVENT_PROBABILITY = {
-
-    # BUY
-    "ORDER": 100,
-    "ACQUISITION": 100,
-    "BUYBACK": 100,
-    "EXPANSION": 100,
-    "PARTNERSHIP": 100,
-    "EARNINGS": 100,
-    "DIVIDEND": 100,
-    "APPROVAL": 100,
-    "DEBT_REDUCTION": 100,
-
-    # SELL
-    "AUDITOR_RISK": 100,
-    "INSOLVENCY": 100,
-    "DEFAULT": 100,
-    "FRAUD": 100,
-    "REGULATORY": 100,
-    "BANKRUPTCY": 100,
-    "WEAK_EARNINGS": 100,
-    "PLEDGE_RISK": 100,
-    "DOWNGRADE": 100,
-}
-
-
-# =========================================================
 # CLASSIFY NEWS
 # =========================================================
 def classify_news(news_list):
@@ -340,7 +265,7 @@ def classify_news(news_list):
     text = " ".join(news_list).lower()
 
     # =====================================================
-    # IGNORE
+    # IGNORE NOISE
     # =====================================================
     for word in IGNORE_KEYWORDS:
 
@@ -368,9 +293,9 @@ def analyze(company, news_list):
     combined_news = "\n".join(news_list[:3])
 
     prompt = f"""
-You are a professional stock market event analyst.
+You are a professional stock market analyst.
 
-Analyze the following stock market news carefully.
+Analyze the following company news very carefully.
 
 Company:
 {company}
@@ -378,43 +303,57 @@ Company:
 News:
 {combined_news}
 
-Your task:
+Your job:
 
-1. Detect whether the event is materially bullish or bearish.
-2. Ignore compliance and useless filing noise.
-3. Focus ONLY on major price-moving events.
+1. Detect whether this news is strongly bullish or strongly bearish.
+2. Ignore useless compliance and routine filing news.
+3. Focus ONLY on important price-moving events.
 
-Bullish events:
-- large orders
-- acquisitions
-- earnings growth
-- margin expansion
-- capacity expansion
-- strategic partnerships
-- debt reduction
-- approvals
+Examples of bullish events:
+- very large order
+- major acquisition
+- strong earnings growth
+- major margin expansion
+- export order
+- strategic expansion
+- buyback
+- major approval
 
-Bearish events:
-- insolvency
+Examples of bearish events:
 - fraud
-- defaults
-- auditor resignation
-- sebi action
-- large losses
+- insolvency
+- default
 - bankruptcy
+- auditor resignation
+- major regulatory action
+- severe losses
+
+IMPORTANT:
+
+Do NOT guess.
+
+Do NOT hallucinate.
+
+Do NOT generate paragraphs.
 
 Return ONLY valid JSON.
 
-NO markdown.
-NO explanations.
-NO paragraphs.
+Use probability 100 ONLY if the event is extremely strong and obvious.
 
-Valid JSON format:
+Examples:
+- fraud
+- insolvency
+- huge order
+- major acquisition
+- strong earnings surprise
+- bankruptcy
+
+Return ONLY this format:
 
 {{
     "probability": 100,
     "action": "BUY",
-    "reason": "short reason"
+    "reason": "short factual reason"
 }}
 
 OR
@@ -422,7 +361,7 @@ OR
 {{
     "probability": 100,
     "action": "SELL",
-    "reason": "short reason"
+    "reason": "short factual reason"
 }}
 
 OR
@@ -430,7 +369,7 @@ OR
 {{
     "probability": 0,
     "action": "NO TRADE",
-    "reason": "no meaningful trigger"
+    "reason": "no strong trigger"
 }}
 """
 
@@ -473,38 +412,9 @@ for company, news_list in company_news.items():
     # IGNORE
     # =====================================================
     if signal == "IGNORE":
-
         continue
 
     try:
-
-        # =================================================
-        # RULE BASED BUY
-        # =================================================
-        if signal in BUY_EVENTS:
-
-            results.append([
-                company,
-                EVENT_PROBABILITY.get(signal, 100),
-                "BUY",
-                signal
-            ])
-
-            continue
-
-        # =================================================
-        # RULE BASED SELL
-        # =================================================
-        elif signal in SELL_EVENTS:
-
-            results.append([
-                company,
-                EVENT_PROBABILITY.get(signal, 100),
-                "SELL",
-                signal
-            ])
-
-            continue
 
         # =================================================
         # AI ANALYSIS
@@ -543,16 +453,23 @@ for company, news_list in company_news.items():
         )
 
         # =================================================
-        # FINAL FILTER
+        # ONLY EXTREME CONFIDENCE
         # =================================================
-        if action in ["BUY", "SELL"]:
+        if probability != 100:
+            continue
 
-            results.append([
-                company,
-                probability,
-                action,
-                reason
-            ])
+        if action not in ["BUY", "SELL"]:
+            continue
+
+        # =================================================
+        # APPEND
+        # =================================================
+        results.append([
+            company,
+            probability,
+            action,
+            reason
+        ])
 
     except Exception as e:
 
@@ -607,7 +524,7 @@ output_ws.append_row([
 
 
 # =========================================================
-# FORMAT
+# FORMAT TIMESTAMP
 # =========================================================
 last_row = len(
     output_ws.get_all_values()
