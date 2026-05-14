@@ -1,296 +1,3 @@
-'''import re
-import gspread
-from datetime import datetime
-from oauth2client.service_account import ServiceAccountCredentials
-import pytz
-
-# =============================
-# GOOGLE AUTH
-# =============================
-scope = [
-    "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive"
-]
-
-def get_client():
-    creds = ServiceAccountCredentials.from_json_keyfile_name(
-        "service_account.json", scope
-    )
-    return gspread.authorize(creds)
-
-# =============================
-# IST TIME
-# =============================
-def get_ist_time():
-    ist = pytz.timezone('Asia/Kolkata')
-    return datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
-
-# =============================
-# CONFIG
-# =============================
-SHEET_ID = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
-
-# =============================
-# SOURCE WEIGHTS
-# =============================
-SOURCE_WEIGHT = {
-    "nse": 5,
-    "bse": 5,
-    "monc": 3,
-    "et": 1
-}
-
-# =============================
-# KEYWORDS
-# =============================
-STRONG_BUY = [
-"l1 bidder","loa","letter of award","contract secured","large order","order book",
-"buyback","bonus","stock split","record profit","all time high profit",
-"debt free","deleveraging","promoter buying","value unlocking","turnaround"
-]
-
-MEDIUM_BUY = [
-"capacity expansion","partnership","joint venture","acquisition",
-"margin expansion","earnings beat","revenue growth","order inflow"
-]
-
-LIGHT_BUY = [
-"agreement","mou","investment","launch","expansion"
-]
-
-STRONG_SELL = [
-"forensic audit","auditor resignation","default","insolvency","nclt",
-"sebi action","fraud","accounting irregularities","pledge invoked"
-]
-
-MEDIUM_SELL = [
-"rating downgrade","loss widens","earnings miss",
-"production halt","governance issue"
-]
-
-LIGHT_SELL = [
-"stake sale","promoter selling","margin pressure",
-"guidance cut","penalty","litigation"
-]
-
-IGNORE = [
-"board meeting","postal ballot","agm","investor meet",
-"trading window","clarification","newspaper"
-]
-
-# =============================
-# EVENT SCORE
-# =============================
-def event_score(text):
-    text = text.lower()
-
-    if any(x in text for x in IGNORE):
-        return 0, []
-
-    score = 0
-    reasons = []
-
-    for w in STRONG_BUY:
-        if w in text:
-            score += 6
-            reasons.append(w)
-
-    for w in MEDIUM_BUY:
-        if w in text:
-            score += 3
-            reasons.append(w)
-
-    for w in LIGHT_BUY:
-        if w in text:
-            score += 1
-            reasons.append(w)
-
-    for w in STRONG_SELL:
-        if w in text:
-            score -= 6
-            reasons.append(w)
-
-    for w in MEDIUM_SELL:
-        if w in text:
-            score -= 3
-            reasons.append(w)
-
-    for w in LIGHT_SELL:
-        if w in text:
-            score -= 1
-            reasons.append(w)
-
-    return score, reasons
-
-# =============================
-# MONEY SCORE
-# =============================
-def money_score(text):
-    nums = re.findall(r'\d+', text)
-    if not nums:
-        return 0
-
-    val = max([int(n) for n in nums])
-
-    if val > 1000: return 3
-    elif val > 100: return 2
-    elif val > 10: return 1
-    return 0
-
-# =============================
-# SYMBOL NORMALIZATION (FIXED)
-# =============================
-def normalize_symbol(source, row, text):
-
-    if source == "nse":
-        return row[0]
-
-    if source == "bse":
-        return None
-
-    # ✅ allow monc + et
-    if source in ["monc", "et"]:
-        return "GENERIC"
-
-    return None
-
-# =============================
-# READ SHEETS
-# =============================
-def read_sheet(ws, source):
-    data = ws.get_all_values()[1:]
-    result = []
-
-    for r in data:
-        if len(r) < 1:
-            continue
-
-        if source in ["nse","bse"]:
-            text = r[-1]
-            symbol = normalize_symbol(source, r, text)
-
-        elif source == "et":
-            text = r[0]
-            symbol = "GENERIC"
-
-        elif source == "monc":
-            text = r[0]
-            symbol = normalize_symbol(source, r, text)
-
-        else:
-            continue
-
-        if symbol:
-            result.append((source, symbol, text))
-
-    return result
-
-# =============================
-# MAIN ENGINE
-# =============================
-def run():
-    client = get_client()
-    sheet = client.open_by_key(SHEET_ID)
-
-    all_data = []
-
-    for name in ["nse","bse","et","monc"]:
-        try:
-            ws = sheet.worksheet(name)
-            all_data += read_sheet(ws, name)
-        except Exception as e:
-            print(f"Skipping {name}: {e}")
-
-    stock_scores = {}
-
-    for source, symbol, text in all_data:
-
-        if symbol in ["", None]:
-            continue
-
-        e, reasons = event_score(text)
-
-        if source == "bse" and e < 0:
-            continue
-
-        m = money_score(text)
-        w = SOURCE_WEIGHT.get(source, 1)
-
-        total = (e + m) * w
-
-        if symbol not in stock_scores:
-            stock_scores[symbol] = {"score":0, "reasons":[]}
-
-        stock_scores[symbol]["score"] += total
-        stock_scores[symbol]["reasons"].extend(reasons)
-
-    # =============================
-    # FINAL OUTPUT
-    # =============================
-    output = []
-
-    print("\n======= FINAL HIGH PROBABILITY SIGNALS =======\n")
-
-    for stock, data in stock_scores.items():
-
-        score = data["score"]
-        reasons = list(dict.fromkeys(data["reasons"]))
-
-        prob = max(0, min(100, int((score + 20) * 2)))
-
-        if prob >= 70:
-            signal = "STRONG BUY 🟢🟢"
-
-        elif prob >= 60:
-            signal = "BUY 🟢"
-
-        elif prob <= 30:
-            signal = "STRONG SELL 🔴🔴"
-
-        elif prob <= 40:
-            signal = "SELL 🔴"
-
-        else:
-            continue
-
-        print(f"{stock} | Score: {score} | {prob}% | {signal}")
-
-        output.append([
-            datetime.now(pytz.timezone('Asia/Kolkata')).strftime("%Y-%m-%d %H:%M"),
-            stock,
-            score,
-            prob,
-            signal,
-            ", ".join(reasons[:3])
-        ])
-
-    print(f"\nTotal Signals: {len(output)}\n")
-
-    # =============================
-    # WRITE TO SHEET
-    # =============================
-    try:
-        ws = sheet.worksheet("wordf")
-    except:
-        ws = sheet.add_worksheet(title="wordf", rows="1000", cols="10")
-
-    if not ws.get_all_values():
-        ws.append_row(["Time","Stock","Score","Probability","Signal","Reason"])
-
-    output.sort(key=lambda x: x[3], reverse=True)
-
-    if output:
-        ws.append_rows(output)
-
-    ws.append_row(["Last Updated (IST):", get_ist_time()])
-
-# =============================
-# RUN
-# =============================
-if __name__ == "__main__":
-    run()
-'''
-
 import re
 import gspread
 from datetime import datetime
@@ -331,8 +38,8 @@ SOURCE_WEIGHT = {
 # =============================
 # CONFIDENCE THRESHOLDS
 # =============================
-BUY_CONF_THRESHOLD  = 60
-SELL_CONF_THRESHOLD = 60
+BUY_CONF_THRESHOLD  = 80
+SELL_CONF_THRESHOLD = 80
 
 # =============================
 # SCORE CALIBRATION
@@ -348,8 +55,8 @@ SELL_CONF_THRESHOLD = 60
 #   - One very strong keyword + a large deal value, OR
 #   - Two independent strong keywords in the same text
 # =============================
-BUY_100_SCORE  = 30
-SELL_100_SCORE = -30
+BUY_100_SCORE  = 60
+SELL_100_SCORE = -60
 
 # =============================
 # KEYWORD ENGINE
@@ -377,7 +84,7 @@ BUY_PATTERNS = [
     (r'\b(large|mega|significant|major|repeat)\s+order\b',                6, "large/mega/significant order"),
     (r'\border\s+intak(e|es)\b',                                           6, "order intake"),
     (r'\bexecut(e|ed|ing)\s+(a\s+)?share\s+purchase\s+agreement\b',       6, "share purchase agreement"),
-    (r'\baquir(e|es|ed|ing)\b|\bacquisition\b',                           6, "acquisition/acquire"),
+    (r'\baquir(e|es|ed|ing)\b|\bacquisition\b', 1, "acquisition/acquire"),
     (r'\b49\s*%\s*(equity\s+)?stake\b',                                    6, "stake acquisition"),
 
     # Financial Milestones
@@ -390,10 +97,10 @@ BUY_PATTERNS = [
     (r'\bbeat(s|ing)?\s+(estimates?|expectations?|consensus)\b',          6, "beat estimates"),
 
     # Corporate Actions
-    (r'\bbuy\s*back\b|\bshare\s+buy\s*back\b',                            6, "buyback"),
+    (r'\bbuy\s*back\b|\bshare\s+buy\s*back\b', 3, "buyback"),
     (r'\bbonus\s+(issue|shares?)\b',                                       6, "bonus issue/shares"),
     (r'\bstock\s+split\b|\bshare\s+split\b',                              6, "stock/share split"),
-    (r'\brights?\s+issue\b',                                               6, "rights issue"),
+    (r'\brights?\s+issue\b', -1, "rights issue"),
 
     # Debt & Promoter
     (r'\bdebt[\s-]?free\b|\bzero\s+debt\b',                               6, "debt-free"),
@@ -585,6 +292,10 @@ _IGNORE_COMPILED = [re.compile(p, re.IGNORECASE) for p in IGNORE_PATTERNS]
 # =============================
 def event_score(text):
     # Skip routine disclosures immediate
+    # Skip routine/non-tradable disclosures
+    for pat in _IGNORE_COMPILED:
+        if pat.search(text):
+            return 0, 0, []
 
     buy_score  = 0
     sell_score = 0
