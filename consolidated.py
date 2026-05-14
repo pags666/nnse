@@ -116,7 +116,36 @@ for r in all_rows:
 
     if "compliance" in text.lower():
         continue
-
+    bad_keywords = [
+        "dividend",
+        "board meeting",
+        "agm",
+        "scrutinizer",
+        "newspaper publication",
+        "trading window",
+        "compliance",
+        "certificate",
+        "investor presentation",
+        "analyst meet",
+        "transcript",
+        "conference call",
+        "appointment of independent director",
+        "independent director resignation",
+        "closure of trading window",
+    ]
+    
+    txt = text.lower()
+    
+    if any(k in txt for k in bad_keywords):
+        continue
+    if (
+        "cfo" in txt
+        and "resignation" in txt
+        and "fraud" not in txt
+        and "raid" not in txt
+        and "irregularity" not in txt
+    ):
+        continue
     sentiment, conf = finbert_sentiment(text)
 
     if sentiment == "NEUTRAL" and conf < 0.3:
@@ -187,15 +216,29 @@ Return ONLY valid JSON (no explanation outside JSON):
         resp = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
+            temperature=0,
         )
 
-        data = json.loads(resp.choices[0].message.content.replace("```",""))
+        raw = resp.choices[0].message.content.strip()
+        
+        start = raw.find("{")
+        end   = raw.rfind("}") + 1
+        
+        if start == -1 or end == 0:
+            continue
+        
+        data = json.loads(raw[start:end])
 
         action = data["action"].upper()
         confidence = int(data["confidence"])
+        key = f"{ticker}_{action}"
+        
+        if key in seen:
+            continue
+        
+        seen.add(key)
 
-        if action in ("BUY","SELL") and confidence >= 55:
+        if action in ("BUY","SELL") and confidence >= 85:
             final_results.append({
                 "ticker": ticker,
                 "action": action,
