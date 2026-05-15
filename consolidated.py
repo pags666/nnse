@@ -103,33 +103,33 @@ for r in nse_rows:
 # ---------- MONC ----------
 for row in monc_raw[1:]:
 
-    if len(row) < 2:
+    if len(row) < 1:
         continue
 
-    ticker = normalise_ticker(row[0])   # adjust if needed
-    text   = str(row[1])                # adjust if needed
+    text = str(row[0]).strip()
 
-    if ticker and text:
-        all_rows.append({
-            "ticker": ticker,
-            "text": text
-        })
+    if not text:
+        continue
 
+    all_rows.append({
+        "ticker": "MONC_NEWS",
+        "text": text
+    })
 # ---------- ET ----------
 for row in et_raw[1:]:
 
-    if len(row) < 2:
+    if len(row) < 1:
         continue
 
-    ticker = normalise_ticker(row[0])   # adjust if needed
-    text   = str(row[1])                # adjust if needed
+    text = str(row[0]).strip()
 
-    if ticker and text:
-        all_rows.append({
-            "ticker": ticker,
-            "text": text
-        })
-        
+    if not text:
+        continue
+
+    all_rows.append({
+        "ticker": "ET_NEWS",
+        "text": text
+    })
 
 # ✅ correct print
 print(
