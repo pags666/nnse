@@ -134,27 +134,66 @@ for row in all_rows:
     # NSE
     # =====================================================
     if "DETAILS" in row:
-
+    
+        # NSE:
+        # A = SYMBOL
+        # D = DETAILS
+    
         company = str(
             row.get("SYMBOL", "")
         ).strip().upper()
-
+    
         news = str(
             row.get("DETAILS", "")
         ).strip()
-
+    
     # =====================================================
     # BSE
     # =====================================================
     elif "ANNOUNCEMENT" in row:
-
+    
+        # BSE:
+        # A = SYMBOL
+        # C = ANNOUNCEMENT
+    
         company = str(
-            row.get("COMPANY NAME", "")
+            row.get("SYMBOL", "")
         ).strip().upper()
-
+    
         news = str(
             row.get("ANNOUNCEMENT", "")
         ).strip()
+    
+    # =====================================================
+    # ET
+    # =====================================================
+    elif "SUBJECT" in row:
+    
+        # ET:
+        # A = SUBJECT
+    
+        company = "ET_NEWS"
+    
+        news = str(
+            row.get("SUBJECT", "")
+        ).strip()
+    
+    # =====================================================
+    # MONC
+    # =====================================================
+    elif "TITLE" in row:
+    
+        # MONC:
+        # A = TITLE
+    
+        company = "MONC_NEWS"
+    
+        news = str(
+            row.get("TITLE", "")
+        ).strip()
+    
+    else:
+        continue
 
     else:
         continue
