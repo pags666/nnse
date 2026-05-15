@@ -33,6 +33,8 @@ SHEET_ID = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
 SOURCE_WEIGHT = {
     "nse": 5,
     "bse": 5,
+    "monc":4,
+    "et":4
 }
 
 # =============================
@@ -388,7 +390,15 @@ def extract_symbol(source, row):
     elif source == "bse":
         if len(row) > 1 and row[1].strip():
             return row[1].strip().upper()
-
+    # MONC
+    elif source == "monc":
+        if len(row) > 0 and row[0].strip():
+            return row[0].strip().upper()
+    
+    # ET
+    elif source == "et":
+        if len(row) > 0 and row[0].strip():
+            return row[0].strip().upper()
     return None
 
 # =============================
@@ -438,7 +448,7 @@ def run():
     sheet  = client.open_by_key(SHEET_ID)
 
     all_data = []
-    for source in ["nse", "bse"]:
+    for source in ["nse", "bse", "monc", "et"]:
         try:
             ws   = sheet.worksheet(source)
             rows = read_sheet(ws, source)
