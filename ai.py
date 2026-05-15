@@ -16,7 +16,7 @@ def extract_json(text):
 
     try:
 
-        match = re.search(r'\{.*\}', text, re.DOTALL)
+        match = re.search(r'\{\s*"action".*?\}', text, re.DOTALL)
 
         if not match:
             return None
@@ -172,7 +172,7 @@ for row in all_rows:
         # ET:
         # A = SUBJECT
     
-        company = "ET_NEWS"
+        company = f"ET_{hash(news)}"
     
         news = str(
             row.get("SUBJECT", "")
@@ -186,7 +186,7 @@ for row in all_rows:
         # MONC:
         # A = TITLE
     
-        company = "MONC_NEWS"
+        company = f"MONC_{hash(news)}"
     
         news = str(
             row.get("TITLE", "")
@@ -454,7 +454,15 @@ Strong SELL examples:
 - regulatory crackdown
 
 Return ONLY valid JSON.
+DO NOT return:
+- markdown
+- ***
+- explanations
+- text outside JSON
+- multiple JSON objects
 
+Response must start with {{
+and end with }}
 {{
     "action": "BUY",
     "confidence": 85,
