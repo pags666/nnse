@@ -69,6 +69,8 @@ def finbert_sentiment(text):
 # =========================
 nse_rows = sheet_to_records(ss.worksheet("nse"))
 bse_raw  = ss.worksheet("bse").get_all_values()
+monc_raw = ss.worksheet("monc").get_all_values()
+et_raw   = ss.worksheet("et").get_all_values()
 
 all_rows = []   # ✅ define FIRST
 
@@ -98,8 +100,44 @@ for r in nse_rows:
             "text": text
         })
 
+# ---------- MONC ----------
+for row in monc_raw[1:]:
+
+    if len(row) < 2:
+        continue
+
+    ticker = normalise_ticker(row[0])   # adjust if needed
+    text   = str(row[1])                # adjust if needed
+
+    if ticker and text:
+        all_rows.append({
+            "ticker": ticker,
+            "text": text
+        })
+
+# ---------- ET ----------
+for row in et_raw[1:]:
+
+    if len(row) < 2:
+        continue
+
+    ticker = normalise_ticker(row[0])   # adjust if needed
+    text   = str(row[1])                # adjust if needed
+
+    if ticker and text:
+        all_rows.append({
+            "ticker": ticker,
+            "text": text
+        })
+        
+
 # ✅ correct print
-print(f"✅ NSE: {len(nse_rows)} | BSE: {len(bse_raw)-1}")
+print(
+    f"✅ NSE: {len(nse_rows)} | "
+    f"BSE: {len(bse_raw)-1} | "
+    f"MONC: {len(monc_raw)-1} | "
+    f"ET: {len(et_raw)-1}"
+)
 print(f"✅ Total rows: {len(all_rows)}")
 # =========================
 # MAIN LOGIC
