@@ -195,9 +195,6 @@ for row in all_rows:
     else:
         continue
 
-    else:
-        continue
-
     if not company:
         continue
 
@@ -458,30 +455,30 @@ Strong SELL examples:
 
 Return ONLY valid JSON.
 
-{
+{{
     "action": "BUY",
     "confidence": 85,
     "impact": "HIGH",
     "reason": "large export order relative to company scale"
-}
+}}
 
 OR
 
-{
+{{
     "action": "SELL",
     "confidence": 90,
     "impact": "HIGH",
     "reason": "auditor resignation raises governance concerns"
-}
+}}
 
 OR
 
-{
+{{
     "action": "NO TRADE",
     "confidence": 20,
     "impact": "LOW",
     "reason": "non-material or routine announcement"
-}
+}}
 """
 
     response = groq.chat.completions.create(
