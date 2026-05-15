@@ -143,7 +143,7 @@ print(f"✅ Total rows: {len(all_rows)}")
 # MAIN LOGIC
 # =========================
 final_results = []
-
+seen = set()
 for r in all_rows:
 
     ticker = r["ticker"]
