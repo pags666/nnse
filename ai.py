@@ -34,7 +34,9 @@ SHEET_ID = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
 
 INPUT_SHEETS = [
     "nse",
-    "bse"
+    "bse",
+    "monc",
+    "et"
 ]
 
 OUTPUT_WS = "groq"
@@ -155,12 +157,17 @@ for row in all_rows:
     if not news:
         continue
 
-    key = (company, news)
+    cleaned_news = clean_text(news)
 
+    key = (
+        company,
+        cleaned_news[:120]
+    )
+    
     if key not in seen:
-
+    
         company_news[company].append(news)
-
+    
         seen.add(key)
 
 
@@ -169,6 +176,26 @@ for row in all_rows:
 # =========================================================
 IGNORE_KEYWORDS = [
 
+ "conference call",
+    "investor meet",
+    "transcript",
+    "press release",
+    "media release",
+    "disclosure",
+    "certificate under regulation",
+    "secretarial compliance",
+    "newspaper cutting",
+    "corrigendum",
+    "agm notice",
+    "egm notice",
+    "voting",
+    "scrutinizer report",
+    "authorized capital",
+    "loss of share certificate",
+    "change in name",
+    "change in registered office",
+    "trading approval",
+    "notice of postal ballot",
     "scrutinizer",
     "certificate",
     "postal ballot",
@@ -203,59 +230,49 @@ IGNORE_KEYWORDS = [
 # =========================================================
 # EVENT MAP
 # =========================================================
-EVENT_MAP = {
+EVENT_SCORES = {
 
-    # =====================================================
-    # BUY EVENTS
-    # =====================================================
-    "received order": "ORDER",
-    "bagging order": "ORDER",
-    "work order": "ORDER",
-    "letter of award": "ORDER",
-    "large order": "ORDER",
-    "major order": "ORDER",
-    "export order": "ORDER",
-    "contract": "ORDER",
+    # =================================================
+    # VERY BULLISH
+    # =================================================
+    "received order": 90,
+    "bagging order": 90,
+    "letter of award": 90,
+    "export order": 95,
+    "strategic partnership": 75,
+    "capacity expansion": 80,
+    "commercial production": 85,
+    "commissioning": 80,
+    "buyback": 95,
+    "acquisition": 70,
+    "usfda approval": 90,
+    "approval received": 85,
 
-    "acquisition": "ACQUISITION",
+    # =================================================
+    # EARNINGS
+    # =================================================
+    "revenue growth": 50,
+    "profit increase": 60,
+    "ebitda growth": 60,
+    "margin expansion": 70,
 
-    "buyback": "BUYBACK",
-
-    "capacity expansion": "EXPANSION",
-    "commercial production": "EXPANSION",
-    "commissioning": "EXPANSION",
-
-    "strategic partnership": "PARTNERSHIP",
-
-    "profit increase": "EARNINGS",
-    "margin expansion": "EARNINGS",
-    "revenue growth": "EARNINGS",
-    "ebitda growth": "EARNINGS",
-
-    "approval received": "APPROVAL",
-
-    # =====================================================
-    # SELL EVENTS
-    # =====================================================
-    "auditor resignation": "AUDITOR_RISK",
-
-    "insolvency": "INSOLVENCY",
-
-    "default": "DEFAULT",
-
-    "fraud": "FRAUD",
-
-    "sebi action": "REGULATORY",
-
-    "bankruptcy": "BANKRUPTCY",
-
-    "loss increase": "WEAK_EARNINGS",
-
-    "pledged shares": "PLEDGE_RISK",
-
-    "downgrade": "DOWNGRADE",
+    # =================================================
+    # VERY BEARISH
+    # =================================================
+    "fraud": -100,
+    "default": -100,
+    "bankruptcy": -100,
+    "insolvency": -100,
+    "auditor resignation": -95,
+    "sebi action": -90,
+    "pledged shares": -70,
+    "downgrade": -60,
+    "loss increase": -75,
+    "fire accident": -80,
+    "plant shutdown": -85,
+    "income tax raid": -90,
+    "arrested": -95,
 }
-
 
 # =========================================================
 # CLASSIFY NEWS
@@ -264,26 +281,88 @@ def classify_news(news_list):
 
     text = " ".join(news_list).lower()
 
-    # =====================================================
+    # ================================================
     # IGNORE NOISE
-    # =====================================================
+    # ================================================
     for word in IGNORE_KEYWORDS:
 
         if word in text:
+            return 0
 
-            return "IGNORE"
+    score = 0
 
-    # =====================================================
-    # EVENT DETECTION
-    # =====================================================
-    for keyword, event_type in EVENT_MAP.items():
+    for keyword, value in EVENT_SCORES.items():
 
         if keyword in text:
+            score += value
 
-            return event_type
+    return score
+def extract_order_value(text):
 
-    return "UNKNOWN"
+    text = text.lower()
 
+    patterns = [
+
+        r'rs\.?\s?([\d,]+)\s?crore',
+        r'₹\s?([\d,]+)\s?crore',
+        r'order worth rs\.?\s?([\d,]+)',
+        r'worth rs\.?\s?([\d,]+)',
+        r'usd\s?([\d,.]+)\s?million',
+    ]
+
+    for pattern in patterns:
+
+        match = re.search(pattern, text)
+
+        if match:
+
+            try:
+                return float(
+                    match.group(1).replace(",", "")
+                )
+            except:
+                pass
+
+    return 0
+
+def extract_growth(text):
+
+    text = text.lower()
+
+    patterns = [
+
+        r'([\d.]+)%\s?revenue growth',
+        r'([\d.]+)%\s?profit growth',
+        r'([\d.]+)%\s?ebitda growth',
+        r'pat growth of\s?([\d.]+)%'
+    ]
+
+    growths = []
+
+    for pattern in patterns:
+
+        matches = re.findall(pattern, text)
+
+        for m in matches:
+
+            try:
+                growths.append(float(m))
+            except:
+                pass
+
+    if growths:
+        return max(growths)
+
+    return 0
+def clean_text(text):
+
+    text = text.lower()
+
+    text = re.sub(r'[^a-z0-9 ]', ' ', text)
+
+    text = " ".join(text.split())
+
+    return text  
 
 # =========================================================
 # AI ANALYSIS
@@ -291,11 +370,13 @@ def classify_news(news_list):
 def analyze(company, news_list):
 
     combined_news = "\n".join(news_list[:3])
+    order_value = extract_order_value(combined_news)
+    growth = extract_growth(combined_news)
 
     prompt = f"""
-You are a professional stock market analyst.
+You are an institutional equity research analyst.
 
-Analyze the following company news very carefully.
+Analyze whether the following news is likely to create a significant short-term stock price movement.
 
 Company:
 {company}
@@ -303,74 +384,65 @@ Company:
 News:
 {combined_news}
 
-Your job:
+IMPORTANT RULES:
 
-1. Detect whether this news is strongly bullish or strongly bearish.
-2. Ignore useless compliance and routine filing news.
-3. Focus ONLY on important price-moving events.
+1. Ignore routine filings and weak announcements.
+2. Most news should result in NO TRADE.
+3. Only generate BUY or SELL if the event is genuinely material.
+4. Consider:
+   - order size
+   - earnings impact
+   - strategic importance
+   - regulatory impact
+   - financial risk
+   - whether the event is transformational
+5. Be conservative.
+6. Avoid hype.
+7. Never assume future growth without evidence.
 
-Examples of bullish events:
+Strong BUY examples:
 - very large order
 - major acquisition
-- strong earnings growth
-- major margin expansion
-- export order
-- strategic expansion
+- major regulatory approval
+- exceptional earnings surprise
 - buyback
-- major approval
+- major expansion
 
-Examples of bearish events:
+Strong SELL examples:
 - fraud
-- insolvency
-- default
 - bankruptcy
 - auditor resignation
-- major regulatory action
+- insolvency
 - severe losses
-
-IMPORTANT:
-
-Do NOT guess.
-
-Do NOT hallucinate.
-
-Do NOT generate paragraphs.
+- plant shutdown
+- regulatory crackdown
 
 Return ONLY valid JSON.
 
-Use probability 100 ONLY if the event is extremely strong and obvious.
-
-Examples:
-- fraud
-- insolvency
-- huge order
-- major acquisition
-- strong earnings surprise
-- bankruptcy
-
-Return ONLY this format:
-
-{{
-    "probability": 100,
+{
     "action": "BUY",
-    "reason": "short factual reason"
-}}
+    "confidence": 85,
+    "impact": "HIGH",
+    "reason": "large export order relative to company scale"
+}
 
 OR
 
-{{
-    "probability": 100,
+{
     "action": "SELL",
-    "reason": "short factual reason"
-}}
+    "confidence": 90,
+    "impact": "HIGH",
+    "reason": "auditor resignation raises governance concerns"
+}
 
 OR
 
-{{
-    "probability": 0,
+{
     "action": "NO TRADE",
-    "reason": "no strong trigger"
-}}
+    "confidence": 20,
+    "impact": "LOW",
+    "reason": "non-material or routine announcement"
+}
 """
 
     response = groq.chat.completions.create(
@@ -406,19 +478,45 @@ for company, news_list in company_news.items():
     if not news_list:
         continue
 
-    signal = classify_news(news_list)
+    score = classify_news(news_list)
 
-    # =====================================================
-    # IGNORE
-    # =====================================================
-    if signal == "IGNORE":
+    if score == 0:
         continue
 
     try:
-
-        # =================================================
+    
+        combined_news = " ".join(news_list)
+    
+        # ================================================
+        # MATERIALITY CHECK
+        # ================================================
+        order_value = extract_order_value(
+            combined_news
+        )
+    
+        growth = extract_growth(
+            combined_news
+        )
+    
+        # ================================================
+        # FILTER SMALL ORDERS
+        # ================================================
+        if "order" in combined_news.lower():
+    
+            if order_value < 50:
+                continue
+    
+        # ================================================
+        # FILTER WEAK GROWTH
+        # ================================================
+        if "growth" in combined_news.lower():
+    
+            if growth < 20:
+                continue
+    
+        # ================================================
         # AI ANALYSIS
-        # =================================================
+        # ================================================
         ai_output = analyze(
             company,
             news_list
@@ -437,8 +535,8 @@ for company, news_list in company_news.items():
 
             continue
 
-        probability = data.get(
-            "probability",
+        confidence = data.get(
+            "confidence",
             0
         )
 
@@ -455,10 +553,17 @@ for company, news_list in company_news.items():
         # =================================================
         # ONLY EXTREME CONFIDENCE
         # =================================================
-        if probability != 100:
+        if action == "NO TRADE":
             continue
 
-        if action not in ["BUY", "SELL"]:
+        if confidence < 80:
+            continue
+
+        if action == "BUY" and confidence >= 90:
+            pass
+        elif action == "SELL" and confidence >= 85:
+            pass
+        else:
             continue
 
         # =================================================
@@ -466,7 +571,7 @@ for company, news_list in company_news.items():
         # =================================================
         results.append([
             company,
-            probability,
+            confidence,
             action,
             reason
         ])
@@ -480,7 +585,14 @@ for company, news_list in company_news.items():
 # SORT RESULTS
 # =========================================================
 results.sort(
-    key=lambda x: x[1],
+
+    key=lambda x: (
+
+        x[2] == "BUY",
+        x[1]
+
+    ),
+
     reverse=True
 )
 
