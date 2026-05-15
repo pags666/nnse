@@ -25,7 +25,15 @@ def extract_json(text):
 
     except Exception:
         return None
+def clean_text(text):
 
+    text = text.lower()
+
+    text = re.sub(r'[^a-z0-9 ]', ' ', text)
+
+    text = " ".join(text.split())
+
+    return text  
 
 # =========================================================
 # CONFIG
@@ -354,15 +362,7 @@ def extract_growth(text):
         return max(growths)
 
     return 0
-def clean_text(text):
 
-    text = text.lower()
-
-    text = re.sub(r'[^a-z0-9 ]', ' ', text)
-
-    text = " ".join(text.split())
-
-    return text  
 
 # =========================================================
 # AI ANALYSIS
