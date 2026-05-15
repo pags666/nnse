@@ -172,11 +172,11 @@ for row in all_rows:
         # ET:
         # A = SUBJECT
     
-        company = f"ET_{hash(news)}"
-    
         news = str(
             row.get("SUBJECT", "")
         ).strip()
+    
+        company = f"ET_{hash(news)}"
     
     # =====================================================
     # MONC
@@ -186,11 +186,11 @@ for row in all_rows:
         # MONC:
         # A = TITLE
     
-        company = f"MONC_{hash(news)}"
-    
         news = str(
             row.get("TITLE", "")
         ).strip()
+    
+        company = f"MONC_{hash(news)}"
     
     else:
         continue
