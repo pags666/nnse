@@ -9,8 +9,9 @@ jobs:
   run-script:
     runs-on: ubuntu-latest
 
-    env:   # ✅ ADD THIS BLOCK
+    env:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
 
     steps:
       - name: Checkout repo
@@ -22,18 +23,17 @@ jobs:
           python-version: "3.10"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Install dependencies
         run: |
           pip install --upgrade pip
+          pip install -r requirements.txt
           pip install huggingface_hub
 
       - name: Create service account json
         run: echo '${{ secrets.GOOGLE_CREDENTIALS }}' > service_account.json
-      - name: Run ai script
-        run: python consolidated.py
-      - name: Run NSE script
-        run: python nifty_move.py   # ✅ NOW WORKS
+
+      # ======================================
+      # UPDATE SOURCE SHEETS FIRST
+      # ======================================
 
       - name: Run NSE script
         run: python NNSE.py
@@ -41,15 +41,24 @@ jobs:
       - name: Run BSE script
         run: python BSE.py
 
-      - name: Run et script
+      - name: Run ET script
         run: python et.py
 
-      - name: Run moneycontrol script
+      - name: Run Moneycontrol script
         run: python monc.py
 
-      - name: Run words script
+      - name: Run Nifty Move script
+        run: python nifty_move.py
+
+      # ======================================
+      # ANALYSIS SCRIPTS AFTER DATA UPDATE
+      # ======================================
+
+      - name: Run Words script
         run: python words.py
 
-      - name: Run ai script
+      - name: Run AI script
         run: python ai.py
 
+      - name: Run Consolidated script
+        run: python consolidated.py
