@@ -617,9 +617,22 @@ if not existing_data:
 # =========================================================
 # APPEND RESULTS
 # =========================================================
-for row in results:
+# =========================================================
+# APPEND RESULTS
+# =========================================================
+if not results:
 
-    output_ws.append_row(row)
+    print("❌ NO OUTPUT SIGNALS FOUND")
+
+else:
+
+    print("\n✅ FINAL SIGNALS:\n")
+
+    for row in results:
+
+        print(row)
+
+        output_ws.append_row(row)
 
 
 # =========================================================
