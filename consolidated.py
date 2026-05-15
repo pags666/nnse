@@ -12,7 +12,7 @@ from huggingface_hub import InferenceClient
 # CONFIG
 # =========================
 SHEET_ID     = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
-OUTPUT_SHEET = "consolidated"
+OUTPUT_SHEET = "consolitated"
 
 # =========================
 # GOOGLE SHEETS AUTH
@@ -276,7 +276,7 @@ Return ONLY valid JSON (no explanation outside JSON):
         
         seen.add(key)
 
-        if action in ("BUY","SELL") and confidence >= 85:
+        if action in ("BUY","SELL") and confidence >= 50:
             final_results.append({
                 "ticker": ticker,
                 "action": action,
