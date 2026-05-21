@@ -284,7 +284,7 @@ Return ONLY valid JSON (no explanation outside JSON):
         
         seen.add(key)
 
-        if action in ("BUY","SELL") and confidence >= 50:
+        if action in ("BUY","SELL") and confidence >= 70:
             final_results.append({
                 "ticker": final_company,  # Overwriting ticker with parsed company name
                 "action": action,
