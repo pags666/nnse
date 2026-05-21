@@ -142,10 +142,13 @@ print(f"✅ Total rows: {len(all_rows)}")
 # =========================
 # MAIN LOGIC
 # =========================
+# =========================
+# MAIN LOGIC
+# =========================
 final_results = []
 seen = set()
-for r in all_rows:
 
+for r in all_rows:
     ticker = r["ticker"]
     text   = r["text"]
 
@@ -154,28 +157,20 @@ for r in all_rows:
 
     if "compliance" in text.lower():
         continue
+
     bad_keywords = [
-        "dividend",
-        "board meeting",
-        "agm",
-        "scrutinizer",
-        "newspaper publication",
-        "trading window",
-        "compliance",
-        "certificate",
-        "investor presentation",
-        "analyst meet",
-        "transcript",
-        "conference call",
-        "appointment of independent director",
-        "independent director resignation",
-        "closure of trading window",
+        "dividend", "board meeting", "agm", "scrutinizer",
+        "newspaper publication", "trading window", "compliance",
+        "certificate", "investor presentation", "analyst meet",
+        "transcript", "conference call", "appointment of independent director",
+        "independent director resignation", "closure of trading window",
     ]
     
     txt = text.lower()
     
     if any(k in txt for k in bad_keywords):
         continue
+
     if (
         "cfo" in txt
         and "resignation" in txt
@@ -184,12 +179,14 @@ for r in all_rows:
         and "irregularity" not in txt
     ):
         continue
+
     sentiment, conf = finbert_sentiment(text)
 
     if sentiment == "NEUTRAL" and conf < 0.3:
         continue
 
     try:
+        # Added instruction #7 to extract the company name dynamically
         prompt = f"""
 You are a professional stock analyst specializing in Indian markets (NSE/BSE).
 
@@ -227,9 +224,14 @@ STRICT RULES:
 5. DO NOT GUESS.
    If moderately positive → BUY (confidence 55–70)
    If moderately negative → SELL (confidence 55–70)
-6. Keep reasoning SHORT and factual (1 line only).
-IMPORTANT FILTER:
 
+6. Keep reasoning SHORT and factual (1 line only).
+
+7. COMPANY NAME EXTRACTION:
+   Identify the primary listed Indian company name mentioned in the announcement text. 
+   If a clean company ticker/name is found, return it. If it's general news or multiple companies without a clear primary one, default to "{ticker}".
+
+IMPORTANT FILTER:
 - DO NOT give BUY only because of "acquisition"
 - If acquisition impact is unclear, long-term, or already expected → NO TRADE
 - If no immediate financial impact (revenue/profit visibility) → NO TRADE
@@ -245,6 +247,7 @@ ANNOUNCEMENT:
 Return ONLY valid JSON (no explanation outside JSON):
 
 {{
+  "company_name": "<EXTRACTED COMPANY NAME OR DEFAULT TICKER>",
   "action": "BUY | SELL | NO TRADE",
   "confidence": <integer 0-100>,
   "reason": "<short factual reason>"
@@ -269,7 +272,12 @@ Return ONLY valid JSON (no explanation outside JSON):
 
         action = data["action"].upper()
         confidence = int(data["confidence"])
-        key = f"{ticker}_{action}"
+        
+        # Capture the company name extracted by the LLM
+        # Fallback to original ticker if key doesn't exist
+        final_company = data.get("company_name", ticker).strip().upper() 
+        
+        key = f"{final_company}_{action}"
         
         if key in seen:
             continue
@@ -278,17 +286,16 @@ Return ONLY valid JSON (no explanation outside JSON):
 
         if action in ("BUY","SELL") and confidence >= 50:
             final_results.append({
-                "ticker": ticker,
+                "ticker": final_company,  # Overwriting ticker with parsed company name
                 "action": action,
                 "confidence": confidence,
                 "reason": data["reason"]
             })
 
-        print(f"{ticker} → {action} ({confidence})")
+        print(f"{final_company} → {action} ({confidence})")
 
     except Exception as e:
         print("❌", ticker, e)
-
 # =========================
 # WRITE OUTPUT (APPEND MODE)
 # =========================
