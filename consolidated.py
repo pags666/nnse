@@ -72,66 +72,35 @@ bse_raw  = ss.worksheet("bse").get_all_values()
 monc_raw = ss.worksheet("monc").get_all_values()
 et_raw   = ss.worksheet("et").get_all_values()
 
-all_rows = []   # ✅ define FIRST
+all_rows = []   
 
-# ---------- BSE (index-based) ----------
+# ---------- BSE ----------
 for row in bse_raw[1:]:
-
-    if len(row) < 3:
-        continue
-
-    ticker = normalise_ticker(row[1])   # Column B
-    text   = str(row[2])                # Column C
-
+    if len(row) < 3: continue
+    ticker = normalise_ticker(row[1])   
+    text   = str(row[2])                
     if ticker and text:
-        all_rows.append({
-            "ticker": ticker,
-            "text": text
-        })
+        all_rows.append({"ticker": ticker, "text": text})
 
 # ---------- NSE ----------
 for r in nse_rows:
     ticker = normalise_ticker(r.get("SYMBOL", ""))
     text   = str(r.get("DETAILS", ""))
-
     if ticker and text:
-        all_rows.append({
-            "ticker": ticker,
-            "text": text
-        })
+        all_rows.append({"ticker": ticker, "text": text})
 
 # ---------- MONC ----------
 for row in monc_raw[1:]:
-
-    if len(row) < 1:
-        continue
-
+    if len(row) < 1: continue
     text = str(row[0]).strip()
+    if text: all_rows.append({"ticker": "MONC_NEWS", "text": text})
 
-    if not text:
-        continue
-
-    all_rows.append({
-        "ticker": "MONC_NEWS",
-        "text": text
-    })
 # ---------- ET ----------
 for row in et_raw[1:]:
-
-    if len(row) < 1:
-        continue
-
+    if len(row) < 1: continue
     text = str(row[0]).strip()
+    if text: all_rows.append({"ticker": "ET_NEWS", "text": text})
 
-    if not text:
-        continue
-
-    all_rows.append({
-        "ticker": "ET_NEWS",
-        "text": text
-    })
-
-# ✅ correct print
 print(
     f"✅ NSE: {len(nse_rows)} | "
     f"BSE: {len(bse_raw)-1} | "
@@ -139,9 +108,7 @@ print(
     f"ET: {len(et_raw)-1}"
 )
 print(f"✅ Total rows: {len(all_rows)}")
-# =========================
-# MAIN LOGIC
-# =========================
+
 # =========================
 # MAIN LOGIC
 # =========================
@@ -155,15 +122,17 @@ for r in all_rows:
     if len(text) < 30:
         continue
 
-    if "compliance" in text.lower():
-        continue
-
+    # 1. UPDATED PRE-FILTER: Included Brokerage/Analyst noise killers
     bad_keywords = [
         "dividend", "board meeting", "agm", "scrutinizer",
         "newspaper publication", "trading window", "compliance",
         "certificate", "investor presentation", "analyst meet",
         "transcript", "conference call", "appointment of independent director",
         "independent director resignation", "closure of trading window",
+        # --- THE BROKERAGE KILL SWITCH ---
+        "target price", "target cut", "buy recommendation", "brokerage",
+        "motilal oswal", "prabhudas", "anand rathi", "emkay",
+        "jefferies", "nomura", "macquarie", "morgan stanley"
     ]
     
     txt = text.lower()
@@ -186,15 +155,14 @@ for r in all_rows:
         continue
 
     try:
-        # Added instruction #7 to extract the company name dynamically
+        # 2. UPDATED PROMPT: Explicitly block analyst target ratings
         prompt = f"""
 You are a professional stock analyst specializing in Indian markets (NSE/BSE).
-
 Your task: analyze the announcement and determine if it is likely to move stock price in the short term (1–2 days).
 
 STRICT RULES:
 
-1. ONLY consider PRICE-MOVING EVENTS:
+1. ONLY consider PRIMARY BUSINESS EVENTS:
    - Order wins / contracts / MoUs
    - Strong earnings / weak earnings
    - Fundraising / stake sale / acquisition
@@ -204,48 +172,34 @@ STRICT RULES:
    - Large expansion or capacity addition
 
 2. IGNORE COMPLETELY (return NO TRADE):
+   - Analyst upgrades / target price changes
+   - Brokerage recommendations (e.g., Motilal Oswal, Jefferies)
    - Compliance filings
-   - Scrutinizer reports
-   - AGM notices / board meetings
-   - Newspaper publications
-   - Routine disclosures
-   - Certificates / approvals without financial impact
+   - Scrutinizer reports / AGM notices
+   - Newspaper publications / Routine disclosures
 
 3. SENTIMENT LOGIC:
    - Strong positive business event → BUY
    - Strong negative event → SELL
-   - Weak / unclear / mixed → NO TRADE
+   - Weak / unclear / mixed / analyst rating → NO TRADE
 
 4. CONFIDENCE SCORING (STRICT):
    - 80–100 → strong, clear impact
    - 65–79 → moderate impact
    - <65 → weak → NO TRADE
 
-5. DO NOT GUESS.
-   If moderately positive → BUY (confidence 55–70)
-   If moderately negative → SELL (confidence 55–70)
-
-6. Keep reasoning SHORT and factual (1 line only).
-
-7. COMPANY NAME EXTRACTION:
-   Identify the primary listed Indian company name mentioned in the announcement text. 
+5. COMPANY NAME EXTRACTION:
+   Identify the primary listed Indian company name mentioned. 
    If a clean company ticker/name is found, return it. If it's general news or multiple companies without a clear primary one, default to "{ticker}".
 
 IMPORTANT FILTER:
-- DO NOT give BUY only because of "acquisition"
-- If acquisition impact is unclear, long-term, or already expected → NO TRADE
+- DO NOT give BUY only because of "acquisition" if impact is unclear.
 - If no immediate financial impact (revenue/profit visibility) → NO TRADE
-
-always dont blindly by comparing to the words only. 
----
 
 ANNOUNCEMENT:
 {text}
 
----
-
 Return ONLY valid JSON (no explanation outside JSON):
-
 {{
   "company_name": "<EXTRACTED COMPANY NAME OR DEFAULT TICKER>",
   "action": "BUY | SELL | NO TRADE",
@@ -253,61 +207,48 @@ Return ONLY valid JSON (no explanation outside JSON):
   "reason": "<short factual reason>"
 }}
 """
-
+        # 3. UPDATED API CALL: Enforce JSON mode natively
         resp = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
+            response_format={"type": "json_object"} # <--- This guarantees clean JSON
         )
 
-        raw = resp.choices[0].message.content.strip()
-        
-        start = raw.find("{")
-        end   = raw.rfind("}") + 1
-        
-        if start == -1 or end == 0:
-            continue
-        
-        data = json.loads(raw[start:end])
+        data = json.loads(resp.choices[0].message.content.strip())
 
-        action = data["action"].upper()
-        confidence = int(data["confidence"])
-        
-        # Capture the company name extracted by the LLM
-        # Fallback to original ticker if key doesn't exist
+        action = data.get("action", "NO TRADE").upper()
+        confidence = int(data.get("confidence", 0))
         final_company = data.get("company_name", ticker).strip().upper() 
         
         key = f"{final_company}_{action}"
         
         if key in seen:
             continue
-        
         seen.add(key)
 
         if action in ("BUY","SELL") and confidence >= 70:
             final_results.append({
-                "ticker": final_company,  # Overwriting ticker with parsed company name
+                "ticker": final_company,
                 "action": action,
                 "confidence": confidence,
-                "reason": data["reason"]
+                "reason": data.get("reason", "")
             })
 
-        print(f"{final_company} → {action} ({confidence})")
+            print(f"🎯 {final_company} → {action} ({confidence})")
 
     except Exception as e:
         print("❌", ticker, e)
+
 # =========================
-# WRITE OUTPUT (APPEND MODE)
+# WRITE OUTPUT
 # =========================
 out = open_or_create(OUTPUT_SHEET)
-
-# If sheet is empty → add header
 existing_data = out.get_all_values()
 
 if not existing_data:
     out.append_row(["Ticker","Action","Confidence","Reason"])
 
-# Append new rows
 for r in final_results:
     out.append_row([
         r["ticker"],
@@ -317,18 +258,15 @@ for r in final_results:
     ])
 
 print(f"\n✅ Appended: {len(final_results)} signals")
+
 # =========================
 # ADD TIMESTAMP
-# =========================
-# =========================
-# IST TIMESTAMP
 # =========================
 ist_time = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S IST")
 
 out.append_row([])
 out.append_row(["Last Updated", ist_time])
 
-# optional formatting
 last_row = len(out.get_all_values())
 out.format(f"A{last_row}:B{last_row}", {
     "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.7},
@@ -336,4 +274,3 @@ out.format(f"A{last_row}:B{last_row}", {
 })
 
 print(f"⏰ IST Time: {ist_time}")
-
