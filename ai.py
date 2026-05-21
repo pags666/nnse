@@ -159,7 +159,7 @@ for row in all_rows:
         company = str(row.get("SYMBOL", "")).strip().upper()
         news = str(row.get("DETAILS", "")).strip()
     elif "ANNOUNCEMENT" in row:
-        company = str(row.get("SYMBOL", "")).strip().upper()
+        company = str(row.get("COMPANY NAME", "")).strip().upper()
         news = str(row.get("ANNOUNCEMENT", "")).strip()
     elif "SUBJECT" in row:
         news = str(row.get("SUBJECT", "")).strip()
