@@ -1,7 +1,350 @@
+# import os
+# import json
+# from datetime import datetime
+# from zoneinfo import ZoneInfo
+
+# import gspread
+# from groq import Groq
+# from oauth2client.service_account import ServiceAccountCredentials
+# from huggingface_hub import InferenceClient
+
+# # =========================
+# # CONFIG
+# # =========================
+# SHEET_ID     = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
+# OUTPUT_SHEET = "consolitated"
+
+# # =========================
+# # GOOGLE SHEETS AUTH
+# # =========================
+# scope = [
+#     "https://spreadsheets.google.com/feeds",
+#     "https://www.googleapis.com/auth/drive",
+# ]
+# creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
+# gc    = gspread.authorize(creds)
+# ss    = gc.open_by_key(SHEET_ID)
+
+# # =========================
+# # HELPERS
+# # =========================
+# def sheet_to_records(ws):
+#     rows = ws.get_all_values()
+#     if len(rows) < 2:
+#         return []
+#     headers = [h.strip().upper() for h in rows[0]]
+#     return [dict(zip(headers, r)) for r in rows[1:] if any(r)]
+
+# def normalise_ticker(x):
+#     return str(x).strip().upper()
+
+# def open_or_create(title):
+#     try:
+#         return ss.worksheet(title)
+#     except:
+#         return ss.add_worksheet(title=title, rows="200", cols="10")
+
+# # =========================
+# # CLIENTS
+# # =========================
+# groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
+
+# hf_client = InferenceClient(
+#     provider="auto",
+#     api_key=os.environ.get("HF_TOKEN")
+# )
+
+# def finbert_sentiment(text):
+#     try:
+#         result = hf_client.text_classification(
+#             text,
+#             model="ProsusAI/finbert"
+#         )
+#         return result[0]["label"].upper(), float(result[0]["score"])
+#     except:
+#         return "NEUTRAL", 0.5
+
+# # =========================
+# # READ NSE + BSE
+# # =========================
+# nse_rows = sheet_to_records(ss.worksheet("nse"))
+# bse_raw  = ss.worksheet("bse").get_all_values()
+# monc_raw = ss.worksheet("monc").get_all_values()
+# et_raw   = ss.worksheet("et").get_all_values()
+
+# all_rows = []   # ✅ define FIRST
+
+# # ---------- BSE (index-based) ----------
+# for row in bse_raw[1:]:
+
+#     if len(row) < 3:
+#         continue
+
+#     ticker = normalise_ticker(row[1])   # Column B
+#     text   = str(row[2])                # Column C
+
+#     if ticker and text:
+#         all_rows.append({
+#             "ticker": ticker,
+#             "text": text
+#         })
+
+# # ---------- NSE ----------
+# for r in nse_rows:
+#     ticker = normalise_ticker(r.get("SYMBOL", ""))
+#     text   = str(r.get("DETAILS", ""))
+
+#     if ticker and text:
+#         all_rows.append({
+#             "ticker": ticker,
+#             "text": text
+#         })
+
+# # ---------- MONC ----------
+# for row in monc_raw[1:]:
+
+#     if len(row) < 1:
+#         continue
+
+#     text = str(row[0]).strip()
+
+#     if not text:
+#         continue
+
+#     all_rows.append({
+#         "ticker": "MONC_NEWS",
+#         "text": text
+#     })
+# # ---------- ET ----------
+# for row in et_raw[1:]:
+
+#     if len(row) < 1:
+#         continue
+
+#     text = str(row[0]).strip()
+
+#     if not text:
+#         continue
+
+#     all_rows.append({
+#         "ticker": "ET_NEWS",
+#         "text": text
+#     })
+
+# # ✅ correct print
+# print(
+#     f"✅ NSE: {len(nse_rows)} | "
+#     f"BSE: {len(bse_raw)-1} | "
+#     f"MONC: {len(monc_raw)-1} | "
+#     f"ET: {len(et_raw)-1}"
+# )
+# print(f"✅ Total rows: {len(all_rows)}")
+# # =========================
+# # MAIN LOGIC
+# # =========================
+# # =========================
+# # MAIN LOGIC
+# # =========================
+# final_results = []
+# seen = set()
+
+# for r in all_rows:
+#     ticker = r["ticker"]
+#     text   = r["text"]
+
+#     if len(text) < 30:
+#         continue
+
+#     if "compliance" in text.lower():
+#         continue
+
+#     bad_keywords = [
+#         "dividend", "board meeting", "agm", "scrutinizer",
+#         "newspaper publication", "trading window", "compliance",
+#         "certificate", "investor presentation", "analyst meet",
+#         "transcript", "conference call", "appointment of independent director",
+#         "independent director resignation", "closure of trading window",
+#     ]
+    
+#     txt = text.lower()
+    
+#     if any(k in txt for k in bad_keywords):
+#         continue
+
+#     if (
+#         "cfo" in txt
+#         and "resignation" in txt
+#         and "fraud" not in txt
+#         and "raid" not in txt
+#         and "irregularity" not in txt
+#     ):
+#         continue
+
+#     sentiment, conf = finbert_sentiment(text)
+
+#     if sentiment == "NEUTRAL" and conf < 0.3:
+#         continue
+
+#     try:
+#         # Added instruction #7 to extract the company name dynamically
+#         prompt = f"""
+# You are a professional stock analyst specializing in Indian markets (NSE/BSE).
+
+# Your task: analyze the announcement and determine if it is likely to move stock price in the short term (1–2 days).
+
+# STRICT RULES:
+
+# 1. ONLY consider PRICE-MOVING EVENTS:
+#    - Order wins / contracts / MoUs
+#    - Strong earnings / weak earnings
+#    - Fundraising / stake sale / acquisition
+#    - Promoter buying or selling
+#    - Regulatory penalties / bans
+#    - Management resignation (especially CEO/CFO)
+#    - Large expansion or capacity addition
+
+# 2. IGNORE COMPLETELY (return NO TRADE):
+#    - Compliance filings
+#    - Scrutinizer reports
+#    - AGM notices / board meetings
+#    - Newspaper publications
+#    - Routine disclosures
+#    - Certificates / approvals without financial impact
+
+# 3. SENTIMENT LOGIC:
+#    - Strong positive business event → BUY
+#    - Strong negative event → SELL
+#    - Weak / unclear / mixed → NO TRADE
+
+# 4. CONFIDENCE SCORING (STRICT):
+#    - 80–100 → strong, clear impact
+#    - 65–79 → moderate impact
+#    - <65 → weak → NO TRADE
+
+# 5. DO NOT GUESS.
+#    If moderately positive → BUY (confidence 55–70)
+#    If moderately negative → SELL (confidence 55–70)
+
+# 6. Keep reasoning SHORT and factual (1 line only).
+
+# 7. COMPANY NAME EXTRACTION:
+#    Identify the primary listed Indian company name mentioned in the announcement text. 
+#    If a clean company ticker/name is found, return it. If it's general news or multiple companies without a clear primary one, default to "{ticker}".
+
+# IMPORTANT FILTER:
+# - DO NOT give BUY only because of "acquisition"
+# - If acquisition impact is unclear, long-term, or already expected → NO TRADE
+# - If no immediate financial impact (revenue/profit visibility) → NO TRADE
+
+# always dont blindly by comparing to the words only. 
+# ---
+
+# ANNOUNCEMENT:
+# {text}
+
+# ---
+
+# Return ONLY valid JSON (no explanation outside JSON):
+
+# {{
+#   "company_name": "<EXTRACTED COMPANY NAME OR DEFAULT TICKER>",
+#   "action": "BUY | SELL | NO TRADE",
+#   "confidence": <integer 0-100>,
+#   "reason": "<short factual reason>"
+# }}
+# """
+
+#         resp = groq_client.chat.completions.create(
+#             model="llama-3.1-8b-instant",
+#             messages=[{"role": "user", "content": prompt}],
+#             temperature=0,
+#         )
+
+#         raw = resp.choices[0].message.content.strip()
+        
+#         start = raw.find("{")
+#         end   = raw.rfind("}") + 1
+        
+#         if start == -1 or end == 0:
+#             continue
+        
+#         data = json.loads(raw[start:end])
+
+#         action = data["action"].upper()
+#         confidence = int(data["confidence"])
+        
+#         # Capture the company name extracted by the LLM
+#         # Fallback to original ticker if key doesn't exist
+#         final_company = data.get("company_name", ticker).strip().upper() 
+        
+#         key = f"{final_company}_{action}"
+        
+#         if key in seen:
+#             continue
+        
+#         seen.add(key)
+
+#         if action in ("BUY","SELL") and confidence >= 70:
+#             final_results.append({
+#                 "ticker": final_company,  # Overwriting ticker with parsed company name
+#                 "action": action,
+#                 "confidence": confidence,
+#                 "reason": data["reason"]
+#             })
+
+#         print(f"{final_company} → {action} ({confidence})")
+
+#     except Exception as e:
+#         print("❌", ticker, e)
+# # =========================
+# # WRITE OUTPUT (APPEND MODE)
+# # =========================
+# out = open_or_create(OUTPUT_SHEET)
+
+# # If sheet is empty → add header
+# existing_data = out.get_all_values()
+
+# if not existing_data:
+#     out.append_row(["Ticker","Action","Confidence","Reason"])
+
+# # Append new rows
+# for r in final_results:
+#     out.append_row([
+#         r["ticker"],
+#         r["action"],
+#         r["confidence"],
+#         r["reason"]
+#     ])
+
+# print(f"\n✅ Appended: {len(final_results)} signals")
+# # =========================
+# # ADD TIMESTAMP
+# # =========================
+# # =========================
+# # IST TIMESTAMP
+# # =========================
+# ist_time = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S IST")
+
+# out.append_row([])
+# out.append_row(["Last Updated", ist_time])
+
+# # optional formatting
+# last_row = len(out.get_all_values())
+# out.format(f"A{last_row}:B{last_row}", {
+#     "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.7},
+#     "textFormat": {"bold": True}
+# })
+
+# print(f"⏰ IST Time: {ist_time}")
+
+
+
 import os
 import json
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import gspread
 from groq import Groq
@@ -13,6 +356,7 @@ from huggingface_hub import InferenceClient
 # =========================
 SHEET_ID     = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
 OUTPUT_SHEET = "consolitated"
+MAX_WORKERS  = 5  # Keeps API calls under rate limits while still being 5x faster
 
 # =========================
 # GOOGLE SHEETS AUTH
@@ -65,98 +409,58 @@ def finbert_sentiment(text):
         return "NEUTRAL", 0.5
 
 # =========================
-# READ NSE + BSE
+# READ DATA SOURCES
 # =========================
+print("Loading data from Google Sheets...")
 nse_rows = sheet_to_records(ss.worksheet("nse"))
 bse_raw  = ss.worksheet("bse").get_all_values()
 monc_raw = ss.worksheet("monc").get_all_values()
 et_raw   = ss.worksheet("et").get_all_values()
 
-all_rows = []   # ✅ define FIRST
+all_rows = []
 
-# ---------- BSE (index-based) ----------
+# ---------- BSE ----------
 for row in bse_raw[1:]:
-
-    if len(row) < 3:
-        continue
-
-    ticker = normalise_ticker(row[1])   # Column B
-    text   = str(row[2])                # Column C
-
+    if len(row) < 3: continue
+    ticker = normalise_ticker(row[1])
+    text   = str(row[2])
     if ticker and text:
-        all_rows.append({
-            "ticker": ticker,
-            "text": text
-        })
+        all_rows.append({"ticker": ticker, "text": text})
 
 # ---------- NSE ----------
 for r in nse_rows:
     ticker = normalise_ticker(r.get("SYMBOL", ""))
     text   = str(r.get("DETAILS", ""))
-
     if ticker and text:
-        all_rows.append({
-            "ticker": ticker,
-            "text": text
-        })
+        all_rows.append({"ticker": ticker, "text": text})
 
 # ---------- MONC ----------
 for row in monc_raw[1:]:
-
-    if len(row) < 1:
-        continue
-
+    if len(row) < 1: continue
     text = str(row[0]).strip()
+    if text:
+        all_rows.append({"ticker": "MONC_NEWS", "text": text})
 
-    if not text:
-        continue
-
-    all_rows.append({
-        "ticker": "MONC_NEWS",
-        "text": text
-    })
 # ---------- ET ----------
 for row in et_raw[1:]:
-
-    if len(row) < 1:
-        continue
-
+    if len(row) < 1: continue
     text = str(row[0]).strip()
+    if text:
+        all_rows.append({"ticker": "ET_NEWS", "text": text})
 
-    if not text:
-        continue
+print(f"✅ NSE: {len(nse_rows)} | BSE: {len(bse_raw)-1} | MONC: {len(monc_raw)-1} | ET: {len(et_raw)-1}")
+print(f"✅ Total rows to process: {len(all_rows)}\n")
 
-    all_rows.append({
-        "ticker": "ET_NEWS",
-        "text": text
-    })
 
-# ✅ correct print
-print(
-    f"✅ NSE: {len(nse_rows)} | "
-    f"BSE: {len(bse_raw)-1} | "
-    f"MONC: {len(monc_raw)-1} | "
-    f"ET: {len(et_raw)-1}"
-)
-print(f"✅ Total rows: {len(all_rows)}")
 # =========================
-# MAIN LOGIC
+# PROCESSING LOGIC (For a Single Row)
 # =========================
-# =========================
-# MAIN LOGIC
-# =========================
-final_results = []
-seen = set()
-
-for r in all_rows:
+def process_single_row(r):
     ticker = r["ticker"]
     text   = r["text"]
 
-    if len(text) < 30:
-        continue
-
-    if "compliance" in text.lower():
-        continue
+    if len(text) < 30: return None
+    if "compliance" in text.lower(): return None
 
     bad_keywords = [
         "dividend", "board meeting", "agm", "scrutinizer",
@@ -167,27 +471,19 @@ for r in all_rows:
     ]
     
     txt = text.lower()
-    
-    if any(k in txt for k in bad_keywords):
-        continue
+    if any(k in txt for k in bad_keywords): return None
 
     if (
-        "cfo" in txt
-        and "resignation" in txt
-        and "fraud" not in txt
-        and "raid" not in txt
+        "cfo" in txt and "resignation" in txt 
+        and "fraud" not in txt and "raid" not in txt 
         and "irregularity" not in txt
-    ):
-        continue
+    ): return None
 
+    # HTTP Request 1
     sentiment, conf = finbert_sentiment(text)
+    if sentiment == "NEUTRAL" and conf < 0.3: return None
 
-    if sentiment == "NEUTRAL" and conf < 0.3:
-        continue
-
-    try:
-        # Added instruction #7 to extract the company name dynamically
-        prompt = f"""
+    prompt = f"""
 You are a professional stock analyst specializing in Indian markets (NSE/BSE).
 
 Your task: analyze the announcement and determine if it is likely to move stock price in the short term (1–2 days).
@@ -253,86 +549,88 @@ Return ONLY valid JSON (no explanation outside JSON):
   "reason": "<short factual reason>"
 }}
 """
-
+    try:
+        # HTTP Request 2
         resp = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
         )
-
         raw = resp.choices[0].message.content.strip()
         
         start = raw.find("{")
         end   = raw.rfind("}") + 1
         
-        if start == -1 or end == 0:
-            continue
-        
+        if start == -1 or end == 0: return None
         data = json.loads(raw[start:end])
 
         action = data["action"].upper()
         confidence = int(data["confidence"])
-        
-        # Capture the company name extracted by the LLM
-        # Fallback to original ticker if key doesn't exist
         final_company = data.get("company_name", ticker).strip().upper() 
-        
-        key = f"{final_company}_{action}"
-        
-        if key in seen:
-            continue
-        
-        seen.add(key)
 
-        if action in ("BUY","SELL") and confidence >= 70:
-            final_results.append({
-                "ticker": final_company,  # Overwriting ticker with parsed company name
+        if action in ("BUY", "SELL") and confidence >= 70:
+            return {
+                "ticker": final_company,
                 "action": action,
                 "confidence": confidence,
                 "reason": data["reason"]
-            })
-
-        print(f"{final_company} → {action} ({confidence})")
-
+            }
     except Exception as e:
-        print("❌", ticker, e)
-# =========================
-# WRITE OUTPUT (APPEND MODE)
-# =========================
-out = open_or_create(OUTPUT_SHEET)
+        print(f"❌ Error with {ticker}: {e}")
+        
+    return None
 
-# If sheet is empty → add header
+# =========================
+# THREADED EXECUTION 
+# =========================
+print("Starting threaded AI analysis...")
+final_results = []
+seen = set()
+
+# Process rows concurrently 
+with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    # Submit tasks to the thread pool
+    future_to_row = {executor.submit(process_single_row, r): r for r in all_rows}
+    
+    # Process results as soon as they finish
+    for future in as_completed(future_to_row):
+        result = future.result()
+        
+        if result:
+            key = f"{result['ticker']}_{result['action']}"
+            if key not in seen:
+                seen.add(key)
+                final_results.append(result)
+                print(f"🎯 {result['ticker']} → {result['action']} ({result['confidence']})")
+
+# =========================
+# WRITE OUTPUT (BATCH MODE)
+# =========================
+print("\nWriting to Google Sheets...")
+out = open_or_create(OUTPUT_SHEET)
 existing_data = out.get_all_values()
 
+# Compile all rows into a single list
+rows_to_insert = []
 if not existing_data:
-    out.append_row(["Ticker","Action","Confidence","Reason"])
+    rows_to_insert.append(["Ticker", "Action", "Confidence", "Reason"])
 
-# Append new rows
 for r in final_results:
-    out.append_row([
-        r["ticker"],
-        r["action"],
-        r["confidence"],
-        r["reason"]
-    ])
+    rows_to_insert.append([r["ticker"], r["action"], r["confidence"], r["reason"]])
 
-print(f"\n✅ Appended: {len(final_results)} signals")
-# =========================
-# ADD TIMESTAMP
-# =========================
-# =========================
-# IST TIMESTAMP
-# =========================
 ist_time = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S IST")
+rows_to_insert.extend([[], ["Last Updated", ist_time]])
 
-out.append_row([])
-out.append_row(["Last Updated", ist_time])
+# Send ONE network request to write everything
+if rows_to_insert:
+    out.append_rows(rows_to_insert)
 
 # optional formatting
-last_row = len(out.get_all_values())
+last_row = len(existing_data) + len(rows_to_insert)
 out.format(f"A{last_row}:B{last_row}", {
     "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.7},
     "textFormat": {"bold": True}
 })
 
+print(f"✅ Appended {len(final_results)} signals successfully.")
 print(f"⏰ IST Time: {ist_time}")
