@@ -35,30 +35,30 @@ jobs:
       # UPDATE SOURCE SHEETS FIRST
       # ======================================
 
-      # - name: Run NSE script
-      #   run: python NNSE.py
+      - name: Run NSE script
+        run: python NNSE.py
 
-      # - name: Run BSE script
-      #   run: python BSE.py
+      - name: Run BSE script
+        run: python BSE.py
 
-      # - name: Run ET script
-      #   run: python et.py
+      - name: Run ET script
+        run: python et.py
 
-      # - name: Run Moneycontrol script
-      #   run: python monc.py
+      - name: Run Moneycontrol script
+        run: python monc.py
 
-      # - name: Run Nifty Move script
-      #   run: python nifty_move.py
+      - name: Run Nifty Move script
+        run: python nifty_move.py
 
       # # # ======================================
       # # # ANALYSIS SCRIPTS AFTER DATA UPDATE
       # # # ======================================
 
-      # - name: Run Words script
-      #   run: python words.py
+      - name: Run Words script
+        run: python words.py
 
-      # - name: Run AI script
-      #   run: python ai.py
+      - name: Run AI script
+        run: python ai.py
 
       - name: Run Consolidated script
         run: python consolidated.py
