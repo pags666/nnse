@@ -36,20 +36,6 @@ OUTPUT_SHEET = "consolitated"
 
 # =========================
 
-scope = [
-
-    "https://spreadsheets.google.com/feeds",
-
-    "https://www.googleapis.com/auth/drive",
-
-]
-
-creds = ServiceAccountCredentials.from_json_keyfile_name("service_account.json", scope)
-
-gc    = gspread.authorize(creds)
-
-ss    = gc.open_by_key(SHEET_ID)
-
 # =========================
 # GOOGLE SHEETS AUTH
 # =========================
