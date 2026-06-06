@@ -107,7 +107,37 @@ hf_client = InferenceClient(
     api_key=os.environ.get("HF_TOKEN")
 
 )
+def extract_stock_name(news):
+    try:
+        prompt = f"""
+Extract the primary Indian listed company mentioned in this news.
 
+News:
+{news}
+
+Return JSON only:
+
+{{
+ "ticker": "<stock name or NSE symbol>"
+}}
+"""
+        resp = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role":"user","content":prompt}],
+            temperature=0
+        )
+
+        raw = resp.choices[0].message.content
+
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+
+        data = json.loads(raw[start:end])
+
+        return data.get("ticker","UNKNOWN")
+
+    except:
+        return "UNKNOWN"
 
 
 def finbert_sentiment(text):
@@ -233,35 +263,22 @@ for row in monc_raw[1:]:
     })
 
 # ---------- ET ----------
-
 for row in et_raw[1:]:
 
-
-
     if len(row) < 1:
-
         continue
-
-
 
     text = str(row[0]).strip()
 
-
-
     if not text:
-
         continue
 
-
+    ticker = extract_stock_name(text)
 
     all_rows.append({
-
-        "ticker": "ET_NEWS",
-
+        "ticker": ticker,
         "text": text
-
     })
-
 
 
 # ✅ correct print
@@ -294,7 +311,7 @@ for r in all_rows:
 
 
 
-    ticker = r["ticker"]
+    ticker = data["ticker"]
 
     text   = r["text"]
 
