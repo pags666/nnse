@@ -50,7 +50,40 @@ gc    = gspread.authorize(creds)
 
 ss    = gc.open_by_key(SHEET_ID)
 
+# =========================
+# GOOGLE SHEETS AUTH
+# =========================
 
+import time
+
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive",
+]
+
+creds = ServiceAccountCredentials.from_json_keyfile_name(
+    "service_account.json",
+    scope
+)
+
+MAX_RETRIES = 10
+
+for attempt in range(MAX_RETRIES):
+    try:
+        ss = gc.open_by_key(SHEET_ID)
+        break
+
+    except gspread.exceptions.APIError as e:
+
+        if "429" in str(e):
+            wait_time = 60 * (attempt + 1)
+            print(f"⚠️ Quota exceeded. Waiting {wait_time} seconds...")
+            time.sleep(wait_time)
+        else:
+            raise
+
+else:
+    raise Exception("Failed after multiple retries.")
 
 # =========================
 
@@ -254,12 +287,11 @@ for row in monc_raw[1:]:
 
 
 
+    ticker = extract_stock_name(text)
+    
     all_rows.append({
-
-        "ticker": "MONC_NEWS",
-
+        "ticker": ticker,
         "text": text
-
     })
 
 # ---------- ET ----------
@@ -311,7 +343,7 @@ for r in all_rows:
 
 
 
-    ticker = data["ticker"]
+    ticker = r["ticker"]
 
     text   = r["text"]
 
