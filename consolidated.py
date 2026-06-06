@@ -27,19 +27,6 @@ from huggingface_hub import InferenceClient
 SHEET_ID     = "1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A"
 
 OUTPUT_SHEET = "consolitated"
-
-
-
-# =========================
-
-# GOOGLE SHEETS AUTH
-
-# =========================
-
-# =========================
-# GOOGLE SHEETS AUTH
-# =========================
-
 import time
 
 scope = [
@@ -52,6 +39,8 @@ creds = ServiceAccountCredentials.from_json_keyfile_name(
     scope
 )
 
+gc = gspread.authorize(creds)
+
 MAX_RETRIES = 10
 
 for attempt in range(MAX_RETRIES):
@@ -63,14 +52,35 @@ for attempt in range(MAX_RETRIES):
 
         if "429" in str(e):
             wait_time = 60 * (attempt + 1)
-            print(f"⚠️ Quota exceeded. Waiting {wait_time} seconds...")
+
+            print(
+                f"⚠️ Quota exceeded. Waiting {wait_time} seconds..."
+            )
+
             time.sleep(wait_time)
+
         else:
             raise
 
 else:
-    raise Exception("Failed after multiple retries.")
+    raise Exception(
+        "Failed after multiple retries."
+    )
+def safe_get_all_values(ws):
+    while True:
+        try:
+            return ws.get_all_values()
 
+        except gspread.exceptions.APIError as e:
+
+            if "429" in str(e):
+                print(
+                    "⚠️ Read quota exceeded. Waiting 60 seconds..."
+                )
+                time.sleep(60)
+
+            else:
+                raise
 # =========================
 
 # HELPERS
@@ -79,7 +89,7 @@ else:
 
 def sheet_to_records(ws):
 
-    rows = ws.get_all_values()
+    rows = safe_get_all_values(ws)
 
     if len(rows) < 2:
 
@@ -187,11 +197,9 @@ def finbert_sentiment(text):
 
 nse_rows = sheet_to_records(ss.worksheet("nse"))
 
-bse_raw  = ss.worksheet("bse").get_all_values()
-
-monc_raw = ss.worksheet("monc").get_all_values()
-
-et_raw   = ss.worksheet("et").get_all_values()
+bse_raw  = safe_get_all_values(ss.worksheet("bse"))
+monc_raw = safe_get_all_values(ss.worksheet("monc"))
+et_raw   = safe_get_all_values(ss.worksheet("et"))
 
 
 
