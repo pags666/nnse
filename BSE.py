@@ -71,17 +71,21 @@ for item in data["Table"]:
 # UPDATE GOOGLE SHEET
 # ---------------------------
 
-sheet.clear()
 
-sheet.append_row([
-    "SYMBOL",
-    "COMPANY NAME",
-    "ANNOUNCEMENT",
-    "CATEGORY"
-])
+existing_data = sheet.get_all_values()
 
-sheet.append_rows(rows)
+if len(existing_data) == 0:
+    sheet.append_row([
+        "SYMBOL",
+        "COMPANY NAME",
+        "SUBJECT",
+        "DETAILS"
+    ])
 
+sheet.append_rows(
+    rows,
+    value_input_option="RAW"
+)
 # ---------------------------
 # ADD LAST UPDATED TIME
 # ---------------------------
