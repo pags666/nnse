@@ -25,7 +25,8 @@ creds = Credentials.from_service_account_file(
 client = gspread.authorize(creds)
 
 sheet_url = "https://docs.google.com/spreadsheets/d/1le7tQxVkznMvphgOB2T0tGyzb_ByeaOHJ4R9E5piY_A/edit"
-sheet = client.open_by_url(sheet_url).sheet1
+spreadsheet = client.open_by_url(sheet_url)
+sheet = spreadsheet.worksheet("nse")
 
 
 # -------------------------
@@ -80,10 +81,20 @@ df = pd.DataFrame(rows, columns=[
 # UPLOAD TO GOOGLE SHEET
 # -------------------------
 
-sheet.clear()
 
-sheet.update(
-    [df.columns.values.tolist()] + df.values.tolist()
+rows_to_append = df.values.tolist()
+existing_data = sheet.get_all_values()
+
+if len(existing_data) == 0:
+    sheet.append_row([
+        "SYMBOL",
+        "COMPANY NAME",
+        "SUBJECT",
+        "DETAILS"
+    ])
+sheet.append_rows(
+    rows_to_append,
+    value_input_option="RAW"
 )
 
 # -------------------------
